@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Olheiro",
+  "version": "0.2.0",
+  "identifier": "com.olheiro.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev:stack",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Olheiro",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 960,
+        "minHeight": 660,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": ["resources/olheiro-backend.exe"],
+    "icon": ["icons/icon.ico"]
+  }
+}

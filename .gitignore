@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# PyInstaller
+build/
+*.spec
+
+# Local binaries generated during packaging
+src-tauri/resources/*.exe
+src-tauri/resources/*.dll
+src-tauri/resources/*.msi
+
+# Bundled third-party runtime copied by build_exe.bat
+vendor/
+
+# User data and private local state
+settings.json
+tauri-dev.log
+*.log
+
+# Personal captures / screenshots
+captures/*
+!captures/.gitkeep
+recorte_*.png
+recorte_*.jpg
+recorte_*.jpeg
+recorte_*.webp
+screenshot*.png
+screenshot*.jpg
+screenshot*.jpeg
+Screenshot*.png
+Screenshot*.jpg
+print*.png
+print*.jpg
+prints/
+screenshots/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
