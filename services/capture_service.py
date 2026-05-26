@@ -18,15 +18,18 @@ class ScreenCaptureService:
         self.capture_dir = capture_dir
         self.temp_dir = Path(tempfile.gettempdir()) / "olheiro"
 
-    def capture_region(self, root: tk.Tk, save_to_captures: bool = True) -> Optional[CaptureResult]:
+    def capture_region(self, root: tk.Tk, save_to_captures: bool = True, restore_root: bool = False) -> Optional[CaptureResult]:
         root.withdraw()
         root.update()
         time.sleep(0.12)
         try:
             region = self._choose_region(root)
         finally:
-            root.deiconify()
-            root.lift()
+            if restore_root:
+                root.deiconify()
+                root.lift()
+            else:
+                root.withdraw()
 
         if not region:
             return None
@@ -59,7 +62,7 @@ class ScreenCaptureService:
         canvas = tk.Canvas(overlay, width=screen_w, height=screen_h, highlightthickness=0)
         canvas.pack(fill="both", expand=True)
 
-        photo = ImageTk.PhotoImage(display_image)
+        photo = ImageTk.PhotoImage(display_image, master=overlay)
         canvas.image_ref = photo
         canvas.create_image(0, 0, image=photo, anchor="nw")
         canvas.create_rectangle(20, 20, 530, 66, fill="#071d49", outline="")

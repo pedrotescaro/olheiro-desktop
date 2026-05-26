@@ -60,10 +60,10 @@ if errorlevel 1 exit /b 1
 echo.
 echo [Olheiro] Build finalizado.
 echo Instalador EXE:
-echo src-tauri\target\release\bundle\nsis\Olheiro_0.2.0_x64-setup.exe
+echo src-tauri\target\release\bundle\nsis\Olheiro_0.2.1_x64-setup.exe
 echo.
 echo Instalador MSI:
-echo src-tauri\target\release\bundle\msi\Olheiro_0.2.0_x64_en-US.msi
+echo src-tauri\target\release\bundle\msi\Olheiro_0.2.1_x64_en-US.msi
 echo.
 echo Executavel de release para teste local:
 echo src-tauri\target\release\olheiro.exe

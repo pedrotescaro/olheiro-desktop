@@ -111,8 +111,9 @@ export function App() {
       const result = await api.capture();
       if (result.state) applyState(result.state);
       setStatus(result.cancelled ? { label: "Recorte cancelado", tone: "ready" } : { label: "OCR concluido", tone: "success" });
-    } catch {
-      setStatus({ label: "Erro ao recortar", tone: "error" });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Erro desconhecido";
+      setStatus({ label: `Erro ao recortar: ${detail}`, tone: "error" });
     } finally {
       setBusy(false);
     }

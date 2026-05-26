@@ -11,7 +11,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    const message = await response.text();
+    const body = await response.text();
+    let message = body;
+    try {
+      const payload = JSON.parse(body) as { message?: string };
+      message = payload.message || message;
+    } catch {
+      message = body;
+    }
     throw new Error(message || `HTTP ${response.status}`);
   }
   return response.json() as Promise<T>;

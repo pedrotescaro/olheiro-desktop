@@ -26,8 +26,8 @@ Baixe a versao mais recente pela pagina de releases:
 
 Arquivos principais da release:
 
-- `Olheiro_0.2.0_x64-setup.exe`: instalador recomendado para Windows.
-- `Olheiro_0.2.0_x64_en-US.msi`: instalador MSI alternativo.
+- `Olheiro_0.2.1_x64-setup.exe`: instalador recomendado para Windows.
+- `Olheiro_0.2.1_x64_en-US.msi`: instalador MSI alternativo.
 
 > O instalador inclui o app Tauri, o frontend React, o backend Python empacotado e os recursos necessarios para OCR quando o build foi gerado com Tesseract instalado.
 
@@ -132,8 +132,8 @@ O script abaixo prepara dependencias, empacota o backend Python com PyInstaller,
 
 Saidas:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.2.0_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.2.0_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.2.1_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.2.1_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ## Atalhos

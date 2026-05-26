@@ -94,12 +94,7 @@ class BackendState:
 
     def capture(self) -> dict[str, Any]:
         self._log("Aguardando recorte.")
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            result = self.capture_service.capture_region(root, self.settings.save_captures)
-        finally:
-            root.destroy()
+        result = self.capture_service.capture_region(self.clipboard_root, self.settings.save_captures)
 
         if result is None:
             self._log("Recorte cancelado.")

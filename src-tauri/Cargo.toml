@@ -1,6 +1,6 @@
 [package]
 name = "olheiro"
-version = "0.2.0"
+version = "0.2.1"
 description = "Olheiro desktop shell"
 authors = ["Olheiro"]
 license = ""
