@@ -27,8 +27,8 @@ Download the latest version from the releases page:
 
 Main release files:
 
-- `Olheiro_0.3.4_x64-setup.exe`: recommended installer for Windows.
-- `Olheiro_0.3.4_x64_en-US.msi`: alternative MSI installer.
+- `Olheiro_0.3.5_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.3.5_x64_en-US.msi`: alternative MSI installer.
 
 > The installer includes the Tauri app, React frontend, bundled Python backend and the resources needed for OCR when the build was generated with Tesseract installed.
 
@@ -42,13 +42,15 @@ It does not automate course platforms, does not log in to accounts, does not sav
 
 - Screen capture with `Esc` to cancel.
 - Saves to `captures/recorte_YYYYMMDD_HHMMSS.png`.
-- Local OCR with Tesseract + image pre-processing (grayscale, upscale, contrast, binarization).
+- Local OCR with Tesseract, selectable language and reprocessing modes.
 - Preview of the last capture.
 - Editable OCR text before copy or paste.
 - Editable default prompt saved locally.
 - Copy OCR, prompt, image or prompt + image.
 - Open Gemini, ChatGPT, Claude, Copilot, Perplexity and DeepSeek.
 - Real AI provider icons, including DeepSeek from the official chat favicon.
+- Study profiles for Geral, Cisco, Redes, Ingles, Programacao and Matematica.
+- Visual send-to-AI queue showing copy, open and user-controlled paste stages.
 - Optional auto-copy after capture.
 - Optional auto-paste with delay, never sending Enter.
 - Continuous local scroll up or down.
@@ -57,7 +59,10 @@ It does not automate course platforms, does not log in to accounts, does not sav
 - **Capture history persisted across sessions.**
 - **Light / Dark / System theme.**
 - **English and Portuguese interface.**
-- **Option to reuse the active AI browser tab or open a new tab.**
+- **Dedicated local dispatcher tab to reuse the same AI tab more reliably.**
+- **Mini floating panel with capture, send, paste and stop-scroll controls.**
+- **Privacy tools to clear history/captures and auto-delete old captures.**
+- **Copy diagnostic log for faster bug reports.**
 - **Automatic update check via GitHub releases.**
 - Preferences and captures saved locally.
 
@@ -75,6 +80,10 @@ It features:
 - Modern switches;
 - Visible status indicator;
 - AI selection with icons;
+- Study profile selector;
+- OCR language and pre-processing controls;
+- Send-to-AI progress queue;
+- Mini floating control panel;
 - Persistent action history;
 - Responsive layout for smaller and larger screens.
 
@@ -141,8 +150,8 @@ The script below prepares dependencies, packages the Python backend with PyInsta
 
 Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.4_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.3.4_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.5_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.3.5_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ### Code signing (optional)
@@ -202,7 +211,8 @@ Use Olheiro to study and understand content. Respect course rules, platforms, ex
 - ~~Improve OCR with image pre-processing.~~ ✅
 - ~~Create light/dark theme.~~ ✅
 - ~~Add English and Portuguese interface.~~ ✅
-- ~~Add reuse AI tab option.~~ ✅
+- ~~Add reuse AI tab option with a dedicated local dispatcher.~~ ✅
+- ~~Add study profiles, OCR reprocess controls, privacy cleanup and diagnostics.~~ ✅
 - ~~Prepare code signing infrastructure.~~ ✅
 - ~~Auto-update via GitHub releases.~~ ✅
 - Add more AI providers.

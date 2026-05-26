@@ -45,7 +45,7 @@ class OCRService:
         self.status = "OCR instalado, mas tesseract.exe não foi localizado."
         return self.status
 
-    def extract_text(self, image_path: Path) -> OCRResult:
+    def extract_text(self, image_path: Path, lang: str | None = None, preprocess: str = "balanced") -> OCRResult:
         try:
             import pytesseract
         except Exception:
@@ -56,12 +56,16 @@ class OCRService:
         except Exception as exc:
             return OCRResult("", f"Não foi possivel abrir o recorte: {str(exc).splitlines()[0]}", False)
 
-        image = self._preprocess(image)
+        image = self._preprocess(image, preprocess)
 
         errors: list[str] = []
-        for lang in (self.lang, "eng", ""):
+        preferred_lang = lang or self.lang
+        fallback_langs = [preferred_lang, "eng", ""]
+        if preferred_lang == "eng+por":
+            fallback_langs = ["eng+por", "por+eng", "eng", ""]
+        for current_lang in fallback_langs:
             try:
-                kwargs = {"lang": lang} if lang else {}
+                kwargs = {"lang": current_lang} if current_lang else {}
                 text = pytesseract.image_to_string(image, **kwargs).strip()
                 if text:
                     return OCRResult(text, "OCR concluído.", True)
@@ -72,8 +76,11 @@ class OCRService:
         detail = " | ".join(errors[:2]) if errors else "erro desconhecido"
         return OCRResult("", f"Erro no OCR: {detail}", False)
 
-    def _preprocess(self, image: Image.Image) -> Image.Image:
+    def _preprocess(self, image: Image.Image, mode: str = "balanced") -> Image.Image:
         """Pre-process image to improve OCR accuracy."""
+        if mode == "raw":
+            return image
+
         # Convert to grayscale
         gray = image.convert("L")
 
@@ -83,13 +90,14 @@ class OCRService:
             gray = gray.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
 
         # Increase contrast
-        gray = ImageEnhance.Contrast(gray).enhance(1.8)
+        contrast = 2.4 if mode == "high_contrast" else 1.8
+        gray = ImageEnhance.Contrast(gray).enhance(contrast)
 
         # Increase sharpness
         from PIL import ImageFilter
         gray = gray.filter(ImageFilter.SHARPEN)
 
-        # Apply simple threshold binarization for cleaner text
-        gray = gray.point(lambda x: 255 if x > 140 else 0, "1")
+        if mode == "high_contrast":
+            gray = gray.point(lambda x: 255 if x > 140 else 0, "1")
 
         return gray.convert("L")

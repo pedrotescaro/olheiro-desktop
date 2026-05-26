@@ -17,6 +17,7 @@ export type Capture = {
 
 export type Settings = {
   ai_provider: string;
+  study_profile: string;
   paste_mode: string;
   paste_delay_seconds: number;
   auto_open_after_capture: boolean;
@@ -24,9 +25,13 @@ export type Settings = {
   auto_paste_after_delay: boolean;
   save_captures: boolean;
   prompt_template: string;
+  ocr_language: string;
+  ocr_preprocess: string;
   scroll_speed: number;
   history_limit: number;
   reuse_ai_tab: boolean;
+  privacy_auto_delete_days: number;
+  mini_panel: boolean;
   theme: "light" | "dark" | "system";
   language: "pt" | "en";
 };
@@ -50,4 +55,5 @@ export type ApiResult = {
   message?: string;
   cancelled?: boolean;
   state?: BackendState;
+  diagnostic?: string;
 };

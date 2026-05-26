@@ -69,10 +69,10 @@ if defined OLHEIRO_SIGN_CERT (
 echo.
 echo [Olheiro] Build finalizado.
 echo Instalador EXE:
-echo src-tauri\target\release\bundle\nsis\Olheiro_0.3.4_x64-setup.exe
+echo src-tauri\target\release\bundle\nsis\Olheiro_0.3.5_x64-setup.exe
 echo.
 echo Instalador MSI:
-echo src-tauri\target\release\bundle\msi\Olheiro_0.3.4_x64_en-US.msi
+echo src-tauri\target\release\bundle\msi\Olheiro_0.3.5_x64_en-US.msi
 echo.
 echo Executavel de release para teste local:
 echo src-tauri\target\release\olheiro.exe

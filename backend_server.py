@@ -6,7 +6,7 @@ import threading
 import time
 import urllib.parse
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Optional
@@ -46,6 +46,7 @@ class BackendState:
         self.logs: list[str] = []
         self.pending_dispatch_url: Optional[str] = None
         self.last_dispatch_poll: float = 0.0
+        self._purge_old_captures()
 
     def close(self) -> None:
         self.scroll_service.stop()
@@ -119,6 +120,7 @@ class BackendState:
         settings_data.update(payload)
         self.settings = AppSettings.from_dict(settings_data)
         save_settings(self.settings)
+        self._purge_old_captures()
         return self.serialize()
 
     def capture(self) -> dict[str, Any]:
@@ -130,7 +132,11 @@ class BackendState:
             return {"cancelled": True, "state": self.serialize()}
 
         self._log("Processando OCR.")
-        ocr = self.ocr_service.extract_text(result.image_path)
+        ocr = self.ocr_service.extract_text(
+            result.image_path,
+            lang=self.settings.ocr_language,
+            preprocess=self.settings.ocr_preprocess,
+        )
         result.ocr_text = ocr.text
         result.ocr_status = ocr.status
         result.prompt = build_prompt(self.settings.prompt_template, result, result.ocr_text)
@@ -148,6 +154,25 @@ class BackendState:
             self.schedule_paste(self.settings.paste_mode, result.ocr_text, result.prompt)
         beep()
         return {"cancelled": False, "state": self.serialize()}
+
+    def reprocess_ocr(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.current
+        if result is None:
+            return self._message(False, "Nenhum recorte pronto.")
+        lang = str(payload.get("ocrLanguage") or self.settings.ocr_language)
+        preprocess = str(payload.get("ocrPreprocess") or self.settings.ocr_preprocess)
+        self._log(f"Reprocessando OCR ({lang}, {preprocess}).")
+        ocr = self.ocr_service.extract_text(result.image_path, lang=lang, preprocess=preprocess)
+        result.ocr_text = ocr.text
+        result.ocr_status = ocr.status
+        result.prompt = build_prompt(self.settings.prompt_template, result, result.ocr_text)
+        self.settings.ocr_language = lang
+        self.settings.ocr_preprocess = preprocess
+        self.settings.normalize()
+        save_settings(self.settings)
+        self._save_history()
+        self._log(result.ocr_status)
+        return self._message(ocr.ok, result.ocr_status)
 
     def copy_content(self, mode: str, ocr_text: str | None = None, prompt: str | None = None) -> dict[str, Any]:
         result = self.current
@@ -195,9 +220,27 @@ class BackendState:
 
     def open_ai(self, provider_name: str) -> dict[str, Any]:
         provider = PROVIDERS_BY_NAME.get(provider_name, PROVIDERS_BY_NAME[DEFAULT_PROVIDER])
-        ok, message = self.browser_service.open_url(provider.url, reuse_tab=self.settings.reuse_ai_tab)
+        if self.settings.reuse_ai_tab:
+            ok, message = self._open_ai_via_dispatcher(provider.url)
+        else:
+            ok, message = self.browser_service.open_url(provider.url, reuse_tab=False)
         self._log(f"{provider.name}: {message}")
         return self._message(ok, message)
+
+    def _open_ai_via_dispatcher(self, url: str) -> tuple[bool, str]:
+        if self.dispatcher_connected:
+            self.pending_dispatch_url = url
+            return True, "IA enviada para a guia dedicada do Olheiro."
+
+        dispatcher_url = f"http://{HOST}:{PORT}/dispatch?url={urllib.parse.quote(url, safe='')}"
+        ok, message = self.browser_service.open_url(dispatcher_url, reuse_tab=False)
+        if not ok:
+            return ok, message
+        return True, "Guia dedicada do Olheiro aberta. Permita o pop-up uma vez se o navegador pedir."
+
+    @property
+    def dispatcher_connected(self) -> bool:
+        return (time.time() - self.last_dispatch_poll) < 2.5
 
     def open_current_image(self, image_path: str | None = None) -> dict[str, Any]:
         path = Path(image_path) if image_path else (self.current.image_path if self.current else None)
@@ -222,6 +265,64 @@ class BackendState:
     def stop_scroll(self) -> dict[str, Any]:
         self.scroll_service.stop()
         return self._message(True, "Scroll parado.")
+
+    def clear_private_data(self) -> dict[str, Any]:
+        removed = 0
+        for path in list(CAPTURES_DIR.glob("recorte_*.png")):
+            try:
+                path.unlink()
+                removed += 1
+            except OSError:
+                continue
+        try:
+            HISTORY_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
+        self.current = None
+        self.history = []
+        self._log(f"Historico limpo. {removed} captura(s) removida(s).")
+        return self._message(True, f"Historico e {removed} captura(s) removidos.")
+
+    def diagnostic_text(self) -> dict[str, Any]:
+        payload = [
+            "Olheiro - diagnostico local",
+            f"Gerado em: {datetime.now().isoformat(timespec='seconds')}",
+            f"Backend: http://{HOST}:{PORT}",
+            f"OCR: {self.ocr_service.status}",
+            f"Scroll: {self.scroll_label}",
+            f"Captures: {CAPTURES_DIR}",
+            f"IA padrao: {self.settings.ai_provider}",
+            f"Reutilizar guia: {self.settings.reuse_ai_tab}",
+            f"Dispatcher conectado: {self.dispatcher_connected}",
+            "",
+            "Logs recentes:",
+            *self.logs[:30],
+        ]
+        return {"ok": True, "diagnostic": "\n".join(payload), "state": self.serialize()}
+
+    def _purge_old_captures(self) -> None:
+        days = int(self.settings.privacy_auto_delete_days or 0)
+        if days <= 0 or not CAPTURES_DIR.exists():
+            return
+        cutoff = datetime.now() - timedelta(days=days)
+        kept_history: list[CaptureResult] = []
+        removed = 0
+        for item in self.history:
+            if item.timestamp >= cutoff:
+                kept_history.append(item)
+                continue
+            try:
+                if item.image_path.exists() and CAPTURES_DIR.resolve() in item.image_path.resolve().parents:
+                    item.image_path.unlink()
+                    removed += 1
+            except OSError:
+                pass
+        if len(kept_history) != len(self.history):
+            self.history = kept_history
+            self.current = self.history[0] if self.history else None
+            self._save_history()
+        if removed:
+            self._log(f"Auto-delete removeu {removed} captura(s) antiga(s).")
 
     def _message(self, ok: bool, message: str) -> dict[str, Any]:
         return {"ok": ok, "message": message, "state": self.serialize()}
@@ -344,10 +445,13 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         routes = {
             "/api/settings": lambda: STATE.update_settings(payload),
             "/api/capture": STATE.capture,
+            "/api/ocr/reprocess": lambda: STATE.reprocess_ocr(payload),
             "/api/copy": lambda: STATE.copy_content(payload.get("mode", STATE.settings.paste_mode), payload.get("ocrText"), payload.get("prompt")),
             "/api/paste": lambda: STATE.paste_content(payload.get("mode", STATE.settings.paste_mode), payload.get("ocrText"), payload.get("prompt")),
             "/api/open-ai": lambda: STATE.open_ai(payload.get("provider", STATE.settings.ai_provider)),
             "/api/open-image": lambda: STATE.open_current_image(payload.get("imagePath")),
+            "/api/privacy/clear": STATE.clear_private_data,
+            "/api/diagnostics": STATE.diagnostic_text,
             "/api/scroll/start": lambda: STATE.start_scroll(payload.get("direction", "down"), payload.get("speed")),
             "/api/scroll/stop": STATE.stop_scroll,
         }
@@ -429,6 +533,7 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         return resolved.suffix.lower() == ".png" and any(str(resolved).startswith(str(root)) for root in roots)
 
     def _send_dispatch_page(self) -> None:
+        STATE.last_dispatch_poll = time.time()
         html = """<!DOCTYPE html>
 <html>
 <head>
@@ -488,32 +593,46 @@ class OlheiroHandler(BaseHTTPRequestHandler):
 <body>
     <div class="card">
         <h2>Olheiro AI Dispatcher</h2>
-        <p>Esta guia mantém a conexão de comunicação local com o Olheiro desktop para reutilizar a mesma aba do navegador automaticamente.</p>
-        <p style="color: #64748b;">Mantenha esta guia aberta enquanto estiver utilizando o recurso de reutilização de guias da IA.</p>
+        <p>Esta guia local mantem uma ponte controlada pelo usuario para reutilizar a mesma guia da IA.</p>
+        <p style="color: #64748b;">Mantenha esta guia aberta enquanto estiver usando o recurso de reutilizar guia.</p>
         
         <div class="status-container">
             <span class="status-dot"></span> Conexão ativa com o Olheiro
         </div>
 
         <div class="warning">
-            ⚠️ <strong>Importante:</strong> Se a aba da IA não abrir automaticamente, clique no ícone de "Pop-up bloqueado" na barra de endereço do seu navegador e escolha "Sempre permitir pop-ups de 127.0.0.1".
+            <strong>Importante:</strong> se o navegador bloquear a primeira abertura, permita pop-ups de 127.0.0.1 uma vez. Depois disso o Olheiro reutiliza a mesma guia dedicada.
         </div>
+        <button id="openButton" style="display:none;margin-top:16px;border:0;border-radius:10px;background:#22d3ee;color:#071d49;font-weight:700;padding:10px 14px;cursor:pointer;">
+            Abrir guia da IA
+        </button>
     </div>
     <script>
         const params = new URLSearchParams(window.location.search);
-        const initialUrl = params.get('url');
-        if (initialUrl) {
-            window.open(initialUrl, "olheiro_ai_tab");
+        const button = document.getElementById('openButton');
+        let pendingUrl = params.get('url');
+
+        function openAiTab(url) {
+            if (!url) return;
+            const target = window.open(url, "olheiro_ai_tab");
+            if (!target) {
+                pendingUrl = url;
+                button.style.display = 'inline-flex';
+            } else {
+                pendingUrl = null;
+                button.style.display = 'none';
+            }
         }
+
+        button.addEventListener('click', () => openAiTab(pendingUrl));
+        openAiTab(pendingUrl);
         
         // Poll for new URLs from local server
         setInterval(async () => {
             try {
                 const res = await fetch('/api/dispatch/poll');
                 const data = await res.json();
-                if (data.url) {
-                    window.open(data.url, "olheiro_ai_tab");
-                }
+                if (data.url) openAiTab(data.url);
             } catch (e) {
                 console.error("Erro na comunicação com o Olheiro:", e);
             }

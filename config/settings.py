@@ -19,6 +19,7 @@ DEFAULT_PROMPT_TEMPLATE = (
 @dataclass
 class AppSettings:
     ai_provider: str = DEFAULT_PROVIDER
+    study_profile: str = "Geral"
     paste_mode: str = DEFAULT_PASTE_MODE
     paste_delay_seconds: int = 5
     auto_open_after_capture: bool = True
@@ -26,9 +27,13 @@ class AppSettings:
     auto_paste_after_delay: bool = False
     save_captures: bool = True
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
+    ocr_language: str = "por+eng"
+    ocr_preprocess: str = "balanced"
     scroll_speed: int = 4
     history_limit: int = 8
     reuse_ai_tab: bool = False
+    privacy_auto_delete_days: int = 0
+    mini_panel: bool = True
     theme: str = "system"   # "light", "dark", "system"
     language: str = "pt"    # "pt" or "en"
 
@@ -49,7 +54,13 @@ class AppSettings:
         self.paste_delay_seconds = clamp_int(self.paste_delay_seconds, 1, 20, 5)
         self.scroll_speed = clamp_int(self.scroll_speed, 1, 10, 4)
         self.history_limit = clamp_int(self.history_limit, 3, 20, 8)
+        self.privacy_auto_delete_days = clamp_int(self.privacy_auto_delete_days, 0, 365, 0)
         self.prompt_template = str(self.prompt_template or DEFAULT_PROMPT_TEMPLATE).strip()
+        self.study_profile = str(self.study_profile or "Geral").strip() or "Geral"
+        if self.ocr_language not in ("por+eng", "por", "eng", "spa", "eng+por"):
+            self.ocr_language = "por+eng"
+        if self.ocr_preprocess not in ("balanced", "high_contrast", "raw"):
+            self.ocr_preprocess = "balanced"
         if self.theme not in ("light", "dark", "system"):
             self.theme = "system"
         if self.language not in ("pt", "en"):

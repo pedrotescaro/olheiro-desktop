@@ -11,15 +11,22 @@ import {
   FileText,
   Globe,
   Image as ImageIcon,
+  ListChecks,
   Loader2,
   Menu,
   Moon,
   MousePointer2,
+  PanelTop,
   Play,
   RefreshCw,
   ScrollText,
+  Send,
+  Shield,
+  SlidersHorizontal,
   Square,
   Sun,
+  Trash2,
+  Wand2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,9 +35,52 @@ import { useI18n, type Locale } from "./i18n";
 import type { BackendState, Capture, Provider, Settings } from "./types";
 
 const pasteModes = ["Texto OCR", "Imagem", "Prompt", "Prompt + imagem"];
+const ocrLanguages = ["por+eng", "por", "eng", "spa", "eng+por"];
+const ocrModes = ["balanced", "high_contrast", "raw"];
+const retentionOptions = ["0", "1", "7", "15", "30", "90"];
+
+const studyProfiles = [
+  {
+    name: "Geral",
+    provider: "Gemini",
+    prompt:
+      "Estou estudando este conteudo. Explique em portugues, passo a passo, os conceitos principais do recorte. Se parecer questao de avaliacao, nao responda apenas com a alternativa final: me ajude a entender o raciocinio.",
+  },
+  {
+    name: "Cisco",
+    provider: "ChatGPT",
+    prompt:
+      "Estou estudando redes/Cisco. Explique os conceitos do recorte em portugues, destaque comandos, protocolos, camadas OSI/TCP-IP e o raciocinio. Se parecer avaliacao, ajude a entender sem dar apenas a alternativa final.",
+  },
+  {
+    name: "Redes",
+    provider: "Gemini",
+    prompt:
+      "Explique este conteudo de redes em portugues com exemplos praticos, termos importantes, possiveis pegadinhas e um resumo final para revisao.",
+  },
+  {
+    name: "Ingles",
+    provider: "Claude",
+    prompt:
+      "Use este recorte para me ajudar a estudar ingles. Explique vocabulario, gramatica, contexto e crie exemplos curtos em portugues e ingles.",
+  },
+  {
+    name: "Programacao",
+    provider: "ChatGPT",
+    prompt:
+      "Analise este recorte de programacao. Explique o codigo ou conceito passo a passo, indique erros comuns e mostre um exemplo pequeno quando ajudar.",
+  },
+  {
+    name: "Matematica",
+    provider: "Gemini",
+    prompt:
+      "Explique este conteudo de matematica em portugues, passo a passo, com formulas, intuicao e verificacao do resultado. Se parecer avaliacao, foque no raciocinio.",
+  },
+];
 
 const fallbackSettings: Settings = {
   ai_provider: "Gemini",
+  study_profile: "Geral",
   paste_mode: "Texto OCR",
   paste_delay_seconds: 5,
   auto_open_after_capture: true,
@@ -39,9 +89,13 @@ const fallbackSettings: Settings = {
   save_captures: true,
   prompt_template:
     "Estou estudando este conteúdo. Explique em português, passo a passo, os conceitos principais do recorte. Se parecer questao de avaliação, não responda apenas com a alternativa final: me ajude a entender o raciocínio.",
+  ocr_language: "por+eng",
+  ocr_preprocess: "balanced",
   scroll_speed: 4,
   history_limit: 8,
   reuse_ai_tab: false,
+  privacy_auto_delete_days: 0,
+  mini_panel: true,
   theme: "system",
   language: "pt",
 };
@@ -55,6 +109,12 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sendSteps, setSendSteps] = useState([
+    { label: "Preparar conteudo", done: false },
+    { label: "Copiar para area de transferencia", done: false },
+    { label: "Abrir IA escolhida", done: false },
+    { label: "Aguardar usuario colar/enviar", done: false },
+  ]);
 
   const { t } = useI18n(settings.language as Locale);
 
@@ -140,6 +200,20 @@ export function App() {
     }
   }
 
+  function markSendStep(index: number, done: boolean) {
+    setSendSteps((steps) => steps.map((step, currentIndex) => (currentIndex === index ? { ...step, done } : step)));
+  }
+
+  async function applyStudyProfile(profileName: string) {
+    const profile = studyProfiles.find((item) => item.name === profileName) ?? studyProfiles[0];
+    setPromptTemplate(profile.prompt);
+    await saveSettings({
+      study_profile: profile.name,
+      ai_provider: profile.provider,
+      prompt_template: profile.prompt,
+    });
+  }
+
   async function capture() {
     setBusy(true);
     setStatus({ label: "status.waitingCrop", tone: "working" });
@@ -158,7 +232,7 @@ export function App() {
   async function copyCurrent(mode = settings.paste_mode) {
     if (!current) {
       setStatus({ label: "status.noCapture", tone: "error" });
-      return;
+      return false;
     }
     setBusy(true);
     try {
@@ -169,6 +243,7 @@ export function App() {
       });
       if (result.state) applyState(result.state);
       setStatus({ label: result.message ?? t("status.copied"), tone: result.ok ? "success" : "error" });
+      return Boolean(result.ok);
     } finally {
       setBusy(false);
     }
@@ -197,12 +272,58 @@ export function App() {
     const result = await api.openAi(provider);
     if (result.state) applyState(result.state);
     setStatus({ label: result.ok ? `${provider} ${t("status.openedAi")}` : t("status.openAiFail"), tone: result.ok ? "success" : "error" });
+    return Boolean(result.ok);
   }
 
   async function sendToChatGPT() {
-    await saveSettings({ ai_provider: "ChatGPT" });
-    if (current) await copyCurrent("Prompt");
-    await openAi("ChatGPT");
+    await sendToSelectedAi("ChatGPT");
+  }
+
+  async function sendToSelectedAi(provider = settings.ai_provider) {
+    setSendSteps((steps) => steps.map((step) => ({ ...step, done: false })));
+    markSendStep(0, true);
+    if (settings.ai_provider !== provider) {
+      await saveSettings({ ai_provider: provider });
+    }
+    const copied = current ? await copyCurrent(settings.paste_mode) : true;
+    markSendStep(1, copied);
+    const opened = await openAi(provider);
+    markSendStep(2, opened);
+    markSendStep(3, true);
+  }
+
+  async function reprocessOcr() {
+    if (!current) {
+      setStatus({ label: "status.noCapture", tone: "error" });
+      return;
+    }
+    setBusy(true);
+    setStatus({ label: "Reprocessando OCR", tone: "working" });
+    try {
+      const result = await api.reprocessOcr({
+        ocrLanguage: settings.ocr_language,
+        ocrPreprocess: settings.ocr_preprocess,
+      });
+      if (result.state) applyState(result.state);
+      setStatus({ label: result.message ?? "OCR reprocessado", tone: result.ok ? "success" : "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearPrivateData() {
+    const result = await api.clearPrivacy();
+    if (result.state) applyState(result.state);
+    setStatus({ label: result.message ?? "Historico limpo", tone: result.ok ? "success" : "error" });
+  }
+
+  async function copyDiagnostics() {
+    const result = await api.diagnostics();
+    if (result.state) applyState(result.state);
+    if (result.diagnostic) {
+      await navigator.clipboard.writeText(result.diagnostic);
+    }
+    setStatus({ label: "Diagnostico copiado", tone: result.ok ? "success" : "error" });
   }
 
   async function openImage(captureItem = current) {
@@ -254,7 +375,7 @@ export function App() {
           style={{ background: "var(--bg-sidebar)" }}
         >
           <div className="sidebar-logo flex items-center gap-3">
-            <img src={`${API_BASE}/assets/favicon.png`} className="h-9 w-9 object-contain" alt="Olheiro" />
+            <img src={`${API_BASE}/assets/olheiro_256x256.png`} className="h-9 w-9 rounded-xl object-contain" alt="Olheiro" />
             <div className="sidebar-title">
               <h1 className="text-xl font-semibold tracking-tight">Olheiro</h1>
               <p className="text-xs" style={{ color: "var(--text-sidebar-muted)" }}>{t("sidebar.subtitle")}</p>
@@ -263,7 +384,7 @@ export function App() {
 
           <div className="mt-8 space-y-2">
             <SidebarButton icon={<MousePointer2 size={16} />} label={t("sidebar.capture")} onClick={capture} collapsed={sidebarCollapsed} primary />
-            <SidebarButton icon={<Bot size={16} />} label={t("sidebar.sendChatGPT")} onClick={sendToChatGPT} collapsed={sidebarCollapsed} />
+            <SidebarButton icon={<Bot size={16} />} label={t("sidebar.sendChatGPT")} onClick={() => sendToSelectedAi()} collapsed={sidebarCollapsed} />
             <SidebarButton icon={<Clipboard size={16} />} label={t("sidebar.pasteNow")} onClick={pasteNow} collapsed={sidebarCollapsed} />
             <SidebarButton icon={<Square size={16} />} label={t("sidebar.stopScroll")} onClick={stopScroll} collapsed={sidebarCollapsed} />
           </div>
@@ -316,7 +437,8 @@ export function App() {
           <section className="mt-6 grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
             <div className="space-y-4">
               <Card title={t("card.aiConfig")} subtitle={t("card.aiConfigSub")}>
-                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                  <Select label="Perfil de estudo" value={settings.study_profile} options={studyProfiles.map((profile) => profile.name)} onChange={(profile) => applyStudyProfile(profile)} />
                   <ProviderSelect providers={providers} value={settings.ai_provider} onChange={(ai_provider) => saveSettings({ ai_provider })} label={t("label.ai")} />
                   <Select label={t("label.content")} value={settings.paste_mode} options={pasteModes} onChange={(paste_mode) => saveSettings({ paste_mode })} />
                   <button className="btn btn-dark mt-5 h-10 self-start" onClick={() => openAi()}>
@@ -333,6 +455,7 @@ export function App() {
                       <Switch label={t("switch.pasteAfterDelay")} checked={settings.auto_paste_after_delay} onChange={(auto_paste_after_delay) => saveSettings({ auto_paste_after_delay })} />
                       <Switch label={t("switch.saveCaptures")} checked={settings.save_captures} onChange={(save_captures) => saveSettings({ save_captures })} />
                       <Switch label={t("switch.reuseAiTab")} checked={settings.reuse_ai_tab} onChange={(reuse_ai_tab) => saveSettings({ reuse_ai_tab })} />
+                      <Switch label="Mini painel" checked={settings.mini_panel} onChange={(mini_panel) => saveSettings({ mini_panel })} />
                     </div>
                   </div>
                   <Select
@@ -358,6 +481,17 @@ export function App() {
                   />
                 </div>
 
+                <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                  <Select label="Idioma OCR" value={settings.ocr_language} options={ocrLanguages} onChange={(ocr_language) => saveSettings({ ocr_language })} />
+                  <Select label="Preprocessamento" value={settings.ocr_preprocess} options={ocrModes} onChange={(ocr_preprocess) => saveSettings({ ocr_preprocess })} />
+                  <button className="btn btn-soft mt-5 h-10 self-start" onClick={reprocessOcr} disabled={!current || busy}>
+                    <Wand2 size={15} />
+                    Reprocessar OCR
+                  </button>
+                </div>
+
+                <SendQueue steps={sendSteps} provider={selectedProvider?.name ?? settings.ai_provider} />
+
                 <label className="mt-4 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{t("label.defaultPrompt")}</label>
                 <textarea
                   value={promptTemplate}
@@ -376,6 +510,7 @@ export function App() {
               <Card title={t("card.quickActions")} subtitle={t("card.quickActionsSub")}>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <ActionButton icon={<MousePointer2 />} label={t("btn.capture")} onClick={capture} primary />
+                  <ActionButton icon={<Send />} label="Enviar para IA" onClick={() => sendToSelectedAi()} />
                   <ActionButton icon={<FileText />} label={t("btn.copyOcr")} onClick={() => copyCurrent("Texto OCR")} />
                   <ActionButton icon={<Clipboard />} label={t("btn.pasteNow")} onClick={pasteNow} />
                   <ActionButton icon={<ArrowDown />} label={t("btn.scrollDown")} onClick={() => scroll("down")} subtle />
@@ -450,9 +585,27 @@ export function App() {
                   <Metric label={t("metric.backend")} value={state?.system.backend ?? t("metric.offline")} />
                   <Metric label={t("metric.captures")} value={state?.system.captures ?? t("metric.unavailable")} />
                 </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select
+                    label="Auto-delete de capturas"
+                    value={String(settings.privacy_auto_delete_days)}
+                    options={retentionOptions}
+                    onChange={(privacy_auto_delete_days) => saveSettings({ privacy_auto_delete_days: Number(privacy_auto_delete_days) })}
+                  />
+                  <button className="btn btn-soft mt-5 h-10 self-start" onClick={clearPrivateData}>
+                    <Trash2 size={15} />
+                    Limpar dados
+                  </button>
+                </div>
               </Card>
 
               <Card title={t("card.log")} subtitle={t("card.logSub")}>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <button className="btn btn-soft" onClick={copyDiagnostics}>
+                    <ListChecks size={15} />
+                    Copiar diagnostico
+                  </button>
+                </div>
                 <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl p-2 text-xs" style={{ background: "var(--bg-input)", color: "var(--text-secondary)" }}>
                   {(state?.logs ?? []).length === 0 && <span>{t("misc.noLog")}</span>}
                   {(state?.logs ?? []).map((line, index) => (
@@ -464,6 +617,16 @@ export function App() {
           </section>
         </main>
       </div>
+      {settings.mini_panel && (
+        <MiniPanel
+          status={statusText(status.label)}
+          busy={busy}
+          onCapture={capture}
+          onPaste={pasteNow}
+          onStopScroll={stopScroll}
+          onSend={() => sendToSelectedAi()}
+        />
+      )}
     </div>
   );
 
@@ -476,6 +639,48 @@ export function App() {
 function buildPrompt(capture: Capture, template: string, text: string) {
   const textBlock = text.trim() || "[Nenhum texto OCR detectado.]";
   return `${template.trim()}\n\nArquivo do recorte salvo em:\n${capture.imagePath}\n\nTexto extraido por OCR:\n${textBlock}\n`;
+}
+
+function SendQueue({ steps, provider }: { steps: { label: string; done: boolean }[]; provider: string }) {
+  return (
+    <div className="mt-4 rounded-xl border p-3" style={{ borderColor: "var(--border-default)", background: "var(--bg-card-alt)" }}>
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+        <Send size={15} style={{ color: "var(--accent)" }} />
+        Envio para IA: {provider}
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {steps.map((step) => (
+          <div key={step.label} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs" style={{ background: "var(--bg-input)", color: "var(--text-secondary)" }}>
+            {step.done ? <CheckCircle2 size={14} style={{ color: "var(--success)" }} /> : <span className="h-3.5 w-3.5 rounded-full border" style={{ borderColor: "var(--border-default)" }} />}
+            {step.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniPanel({ status, busy, onCapture, onPaste, onStopScroll, onSend }: { status: string; busy: boolean; onCapture: () => void; onPaste: () => void; onStopScroll: () => void; onSend: () => void }) {
+  return (
+    <div className="mini-panel">
+      <div className="mini-panel-status">
+        {busy ? <Loader2 className="animate-spin" size={13} /> : <PanelTop size={13} />}
+        <span>{status}</span>
+      </div>
+      <button className="mini-btn primary" onClick={onCapture} title="Recortar tela">
+        <MousePointer2 size={15} />
+      </button>
+      <button className="mini-btn" onClick={onSend} title="Enviar para IA">
+        <Send size={15} />
+      </button>
+      <button className="mini-btn" onClick={onPaste} title="Colar agora">
+        <Clipboard size={15} />
+      </button>
+      <button className="mini-btn danger" onClick={onStopScroll} title="Parar scroll">
+        <Square size={15} />
+      </button>
+    </div>
+  );
 }
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {

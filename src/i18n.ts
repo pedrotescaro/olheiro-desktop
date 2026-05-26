@@ -7,7 +7,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Sidebar
     "sidebar.subtitle": "Assistente local de estudo",
     "sidebar.capture": "Recortar tela",
-    "sidebar.sendChatGPT": "Enviar para ChatGPT",
+    "sidebar.sendChatGPT": "Enviar para IA",
     "sidebar.pasteNow": "Colar agora",
     "sidebar.stopScroll": "Parar scroll",
     "sidebar.userControl": "Controle do usuário",
@@ -112,7 +112,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Sidebar
     "sidebar.subtitle": "Local study assistant",
     "sidebar.capture": "Capture screen",
-    "sidebar.sendChatGPT": "Send to ChatGPT",
+    "sidebar.sendChatGPT": "Send to AI",
     "sidebar.pasteNow": "Paste now",
     "sidebar.stopScroll": "Stop scroll",
     "sidebar.userControl": "User control",

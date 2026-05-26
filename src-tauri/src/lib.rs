@@ -10,6 +10,7 @@ use tauri::{Manager, WindowEvent};
 struct BackendProcess(Mutex<Option<Child>>);
 
 pub fn run() {
+    set_windows_app_user_model_id();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -33,6 +34,19 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o Olheiro");
 }
+
+#[cfg(windows)]
+fn set_windows_app_user_model_id() {
+    use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+
+    let app_id: Vec<u16> = "com.olheiro.desktop\0".encode_utf16().collect();
+    unsafe {
+        let _ = SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr());
+    }
+}
+
+#[cfg(not(windows))]
+fn set_windows_app_user_model_id() {}
 
 fn set_main_window_icon(app: &tauri::App) {
     if let Some(window) = app.get_webview_window("main") {

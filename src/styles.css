@@ -194,6 +194,74 @@ input {
   background: var(--btn-soft-hover-bg);
 }
 
+.mini-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  padding: 8px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.mini-panel-status {
+  display: flex;
+  min-width: 0;
+  max-width: 190px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.mini-panel-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-btn {
+  display: inline-flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--btn-soft-border);
+  border-radius: 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.mini-btn:hover {
+  border-color: var(--btn-soft-hover-border);
+  background: var(--btn-soft-hover-bg);
+}
+
+.mini-btn:active {
+  transform: translateY(1px);
+}
+
+.mini-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--btn-dark-bg);
+}
+
+.mini-btn.danger {
+  color: var(--error);
+}
+
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar {
   width: 6px;

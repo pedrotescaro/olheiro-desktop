@@ -36,6 +36,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+  reprocessOcr: (payload: Record<string, unknown>) =>
+    request<ApiResult>("/api/ocr/reprocess", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   copy: (payload: Record<string, unknown>) =>
     request<ApiResult>("/api/copy", {
       method: "POST",
@@ -55,6 +60,16 @@ export const api = {
     request<ApiResult>("/api/open-image", {
       method: "POST",
       body: JSON.stringify({ imagePath }),
+    }),
+  clearPrivacy: () =>
+    request<ApiResult>("/api/privacy/clear", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  diagnostics: () =>
+    request<ApiResult>("/api/diagnostics", {
+      method: "POST",
+      body: JSON.stringify({}),
     }),
   startScroll: (direction: "up" | "down", speed: number) =>
     request<ApiResult>("/api/scroll/start", {
