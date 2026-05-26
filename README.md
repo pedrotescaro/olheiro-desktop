@@ -27,8 +27,8 @@ Download the latest version from the releases page:
 
 Main release files:
 
-- `Olheiro_0.3.2_x64-setup.exe`: recommended installer for Windows.
-- `Olheiro_0.3.2_x64_en-US.msi`: alternative MSI installer.
+- `Olheiro_0.3.3_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.3.3_x64_en-US.msi`: alternative MSI installer.
 
 > The installer includes the Tauri app, React frontend, bundled Python backend and the resources needed for OCR when the build was generated with Tesseract installed.
 
@@ -47,8 +47,8 @@ It does not automate course platforms, does not log in to accounts, does not sav
 - Editable OCR text before copy or paste.
 - Editable default prompt saved locally.
 - Copy OCR, prompt, image or prompt + image.
-- Open Gemini, ChatGPT, Claude, Copilot and Perplexity.
-- Real AI provider icons.
+- Open Gemini, ChatGPT, Claude, Copilot, Perplexity and DeepSeek.
+- Real AI provider icons, including DeepSeek from the official chat favicon.
 - Optional auto-copy after capture.
 - Optional auto-paste with delay, never sending Enter.
 - Continuous local scroll up or down.
@@ -57,7 +57,7 @@ It does not automate course platforms, does not log in to accounts, does not sav
 - **Capture history persisted across sessions.**
 - **Light / Dark / System theme.**
 - **English and Portuguese interface.**
-- **Option to reuse or open new AI tab.**
+- **Option to reuse the active AI browser tab or open a new tab.**
 - **Automatic update check via GitHub releases.**
 - Preferences and captures saved locally.
 
@@ -141,8 +141,8 @@ The script below prepares dependencies, packages the Python backend with PyInsta
 
 Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.2_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.3.2_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.3_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.3.3_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ### Code signing (optional)

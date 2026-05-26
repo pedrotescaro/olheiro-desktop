@@ -195,22 +195,7 @@ class BackendState:
 
     def open_ai(self, provider_name: str) -> dict[str, Any]:
         provider = PROVIDERS_BY_NAME.get(provider_name, PROVIDERS_BY_NAME[DEFAULT_PROVIDER])
-        url = provider.url
-
-        if self.settings.reuse_ai_tab:
-            import time
-            import urllib.parse
-            if time.time() - self.last_dispatch_poll < 3.5:
-                self.pending_dispatch_url = url
-                self._log(f"{provider.name}: Reutilizando guia ativa via dispatcher.")
-                return self._message(True, "Reutilizando guia ativa.")
-            else:
-                dispatch_url = f"http://{HOST}:{PORT}/dispatch?url=" + urllib.parse.quote(url)
-                ok, message = self.browser_service.open_url(dispatch_url)
-                self._log(f"{provider.name}: Abrindo dispatcher no navegador.")
-                return self._message(ok, message)
-
-        ok, message = self.browser_service.open_url(url)
+        ok, message = self.browser_service.open_url(provider.url, reuse_tab=self.settings.reuse_ai_tab)
         self._log(f"{provider.name}: {message}")
         return self._message(ok, message)
 
@@ -411,7 +396,13 @@ class OlheiroHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "message": "Arquivo não encontrado."}, status=404)
             return
         content = resolved.read_bytes()
-        content_type = "image/png" if resolved.suffix.lower() == ".png" else "application/octet-stream"
+        content_types = {
+            ".ico": "image/x-icon",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".webp": "image/webp",
+        }
+        content_type = content_types.get(resolved.suffix.lower(), "application/octet-stream")
         self.send_response(200)
         self._common_headers()
         self.send_header("Content-Type", content_type)
