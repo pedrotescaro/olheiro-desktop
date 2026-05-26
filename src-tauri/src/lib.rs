@@ -14,6 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            set_main_window_icon(app);
             let backend = spawn_backend(app);
             app.manage(BackendProcess(Mutex::new(backend)));
             Ok(())
@@ -31,6 +32,13 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o Olheiro");
+}
+
+fn set_main_window_icon(app: &tauri::App) {
+    if let Some(window) = app.get_webview_window("main") {
+        let icon = tauri::image::Image::new(include_bytes!("../icons/olheiro_256.rgba"), 256, 256);
+        let _ = window.set_icon(icon);
+    }
 }
 
 fn spawn_backend(app: &tauri::App) -> Option<Child> {

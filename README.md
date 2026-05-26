@@ -27,8 +27,8 @@ Download the latest version from the releases page:
 
 Main release files:
 
-- `Olheiro_0.3.3_x64-setup.exe`: recommended installer for Windows.
-- `Olheiro_0.3.3_x64_en-US.msi`: alternative MSI installer.
+- `Olheiro_0.3.4_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.3.4_x64_en-US.msi`: alternative MSI installer.
 
 > The installer includes the Tauri app, React frontend, bundled Python backend and the resources needed for OCR when the build was generated with Tesseract installed.
 
@@ -141,8 +141,8 @@ The script below prepares dependencies, packages the Python backend with PyInsta
 
 Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.3_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.3.3_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.4_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.3.4_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ### Code signing (optional)
