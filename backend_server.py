@@ -44,6 +44,8 @@ class BackendState:
         self.history: list[CaptureResult] = []
         self._load_history()
         self.logs: list[str] = []
+        self.pending_dispatch_url: Optional[str] = None
+        self.last_dispatch_poll: float = 0.0
 
     def close(self) -> None:
         self.scroll_service.stop()
@@ -193,7 +195,22 @@ class BackendState:
 
     def open_ai(self, provider_name: str) -> dict[str, Any]:
         provider = PROVIDERS_BY_NAME.get(provider_name, PROVIDERS_BY_NAME[DEFAULT_PROVIDER])
-        ok, message = self.browser_service.open_url(provider.url, reuse_tab=self.settings.reuse_ai_tab)
+        url = provider.url
+
+        if self.settings.reuse_ai_tab:
+            import time
+            import urllib.parse
+            if time.time() - self.last_dispatch_poll < 3.5:
+                self.pending_dispatch_url = url
+                self._log(f"{provider.name}: Reutilizando guia ativa via dispatcher.")
+                return self._message(True, "Reutilizando guia ativa.")
+            else:
+                dispatch_url = f"http://{HOST}:{PORT}/dispatch?url=" + urllib.parse.quote(url)
+                ok, message = self.browser_service.open_url(dispatch_url)
+                self._log(f"{provider.name}: Abrindo dispatcher no navegador.")
+                return self._message(ok, message)
+
+        ok, message = self.browser_service.open_url(url)
         self._log(f"{provider.name}: {message}")
         return self._message(ok, message)
 
@@ -313,6 +330,16 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/state":
             self._send_json(STATE.serialize())
             return
+        if parsed.path == "/dispatch":
+            self._send_dispatch_page()
+            return
+        if parsed.path == "/api/dispatch/poll":
+            import time
+            STATE.last_dispatch_poll = time.time()
+            url = STATE.pending_dispatch_url
+            STATE.pending_dispatch_url = None
+            self._send_json({"url": url})
+            return
         if parsed.path.startswith("/assets/"):
             self._send_file(ASSETS_DIR / parsed.path.removeprefix("/assets/"))
             return
@@ -409,6 +436,107 @@ class OlheiroHandler(BaseHTTPRequestHandler):
             return False
         roots = [CAPTURES_DIR.resolve(), (ROOT_DIR / "captures").resolve(), Path(os.getenv("TEMP", ".")).resolve()]
         return resolved.suffix.lower() == ".png" and any(str(resolved).startswith(str(root)) for root in roots)
+
+    def _send_dispatch_page(self) -> None:
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Olheiro AI Dispatcher</title>
+    <style>
+        body {
+            background: #0f172a;
+            color: #94a3b8;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .card {
+            background: #1e293b;
+            padding: 32px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+            max-width: 440px;
+            border: 1px solid #334155;
+        }
+        h2 { color: #f8fafc; margin-top: 0; font-size: 22px; }
+        p { font-size: 14px; line-height: 1.5; }
+        .warning {
+            color: #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 13px;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 8px #10b981;
+        }
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #10b981;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Olheiro AI Dispatcher</h2>
+        <p>Esta guia mantém a conexão de comunicação local com o Olheiro desktop para reutilizar a mesma aba do navegador automaticamente.</p>
+        <p style="color: #64748b;">Mantenha esta guia aberta enquanto estiver utilizando o recurso de reutilização de guias da IA.</p>
+        
+        <div class="status-container">
+            <span class="status-dot"></span> Conexão ativa com o Olheiro
+        </div>
+
+        <div class="warning">
+            ⚠️ <strong>Importante:</strong> Se a aba da IA não abrir automaticamente, clique no ícone de "Pop-up bloqueado" na barra de endereço do seu navegador e escolha "Sempre permitir pop-ups de 127.0.0.1".
+        </div>
+    </div>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const initialUrl = params.get('url');
+        if (initialUrl) {
+            window.open(initialUrl, "olheiro_ai_tab");
+        }
+        
+        // Poll for new URLs from local server
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/dispatch/poll');
+                const data = await res.json();
+                if (data.url) {
+                    window.open(data.url, "olheiro_ai_tab");
+                }
+            } catch (e) {
+                console.error("Erro na comunicação com o Olheiro:", e);
+            }
+        }, 500);
+    </script>
+</body>
+</html>"""
+        content = html.encode("utf-8")
+        self.send_response(200)
+        self._common_headers()
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
 
 
 def main() -> None:

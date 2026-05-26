@@ -19,6 +19,7 @@ AI_PROVIDERS: tuple[AIProvider, ...] = (
     AIProvider("Claude", "https://claude.ai/new", ICONS_DIR / "claude.png"),
     AIProvider("Copilot", "https://copilot.microsoft.com/", ICONS_DIR / "copilot.png"),
     AIProvider("Perplexity", "https://www.perplexity.ai/", ICONS_DIR / "perplexity.png"),
+    AIProvider("DeepSeek", "https://chat.deepseek.com/", ICONS_DIR / "deepseek.png"),
 )
 
 PROVIDERS_BY_NAME = {provider.name: provider for provider in AI_PROVIDERS}
