@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 
 @dataclass
@@ -24,7 +24,7 @@ class OCRService:
         try:
             import pytesseract
         except Exception:
-            self.status = "OCR indisponivel: pytesseract nao foi encontrado."
+            self.status = "OCR indisponível: pytesseract não foi encontrado."
             return self.status
 
         found = shutil.which("tesseract")
@@ -42,19 +42,21 @@ class OCRService:
                 self.status = "OCR pronto."
                 return self.status
 
-        self.status = "OCR instalado, mas tesseract.exe nao foi localizado."
+        self.status = "OCR instalado, mas tesseract.exe não foi localizado."
         return self.status
 
     def extract_text(self, image_path: Path) -> OCRResult:
         try:
             import pytesseract
         except Exception:
-            return OCRResult("", "OCR indisponivel: pytesseract nao foi encontrado.", False)
+            return OCRResult("", "OCR indisponível: pytesseract não foi encontrado.", False)
 
         try:
             image = Image.open(image_path)
         except Exception as exc:
-            return OCRResult("", f"Nao foi possivel abrir o recorte: {str(exc).splitlines()[0]}", False)
+            return OCRResult("", f"Não foi possivel abrir o recorte: {str(exc).splitlines()[0]}", False)
+
+        image = self._preprocess(image)
 
         errors: list[str] = []
         for lang in (self.lang, "eng", ""):
@@ -62,10 +64,32 @@ class OCRService:
                 kwargs = {"lang": lang} if lang else {}
                 text = pytesseract.image_to_string(image, **kwargs).strip()
                 if text:
-                    return OCRResult(text, "OCR concluido.", True)
-                return OCRResult("", "OCR concluido, mas nenhum texto foi detectado.", True)
+                    return OCRResult(text, "OCR concluído.", True)
+                return OCRResult("", "OCR concluído, mas nenhum texto foi detectado.", True)
             except Exception as exc:
                 errors.append(str(exc).splitlines()[0])
 
         detail = " | ".join(errors[:2]) if errors else "erro desconhecido"
         return OCRResult("", f"Erro no OCR: {detail}", False)
+
+    def _preprocess(self, image: Image.Image) -> Image.Image:
+        """Pre-process image to improve OCR accuracy."""
+        # Convert to grayscale
+        gray = image.convert("L")
+
+        # Upscale small images (< 300px height) by 2x for better OCR
+        width, height = gray.size
+        if height < 300:
+            gray = gray.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
+
+        # Increase contrast
+        gray = ImageEnhance.Contrast(gray).enhance(1.8)
+
+        # Increase sharpness
+        from PIL import ImageFilter
+        gray = gray.filter(ImageFilter.SHARPEN)
+
+        # Apply simple threshold binarization for cleaner text
+        gray = gray.point(lambda x: 255 if x > 140 else 0, "1")
+
+        return gray.convert("L")

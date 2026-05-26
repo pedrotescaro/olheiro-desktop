@@ -10,9 +10,9 @@ from config.providers import DEFAULT_PASTE_MODE, DEFAULT_PROVIDER, PASTE_MODES, 
 
 
 DEFAULT_PROMPT_TEMPLATE = (
-    "Estou estudando este conteudo. Explique em portugues, passo a passo, "
-    "os conceitos principais do recorte. Se parecer questao de avaliacao, "
-    "nao responda apenas com a alternativa final: me ajude a entender o raciocinio."
+    "Estou estudando este conteúdo. Explique em português, passo a passo, "
+    "os conceitos principais do recorte. Se parecer questão de avaliação, "
+    "não responda apenas com a alternativa final: me ajude a entender o raciocínio."
 )
 
 
@@ -28,6 +28,9 @@ class AppSettings:
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     scroll_speed: int = 4
     history_limit: int = 8
+    reuse_ai_tab: bool = False
+    theme: str = "system"   # "light", "dark", "system"
+    language: str = "pt"    # "pt" or "en"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppSettings":
@@ -47,6 +50,10 @@ class AppSettings:
         self.scroll_speed = clamp_int(self.scroll_speed, 1, 10, 4)
         self.history_limit = clamp_int(self.history_limit, 3, 20, 8)
         self.prompt_template = str(self.prompt_template or DEFAULT_PROMPT_TEMPLATE).strip()
+        if self.theme not in ("light", "dark", "system"):
+            self.theme = "system"
+        if self.language not in ("pt", "en"):
+            self.language = "pt"
 
 
 def clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:

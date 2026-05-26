@@ -3,7 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Assistente desktop local para recorte de tela, OCR, clipboard, scroll e estudo com IA.</strong>
+  <strong>Local desktop assistant for screen capture, OCR, clipboard, scroll and AI-assisted study.</strong><br>
+  <em>Assistente desktop local para recorte de tela, OCR, clipboard, scroll e estudo com IA.</em>
 </p>
 
 <p align="center">
@@ -20,163 +21,190 @@
 
 ## Download
 
-Baixe a versao mais recente pela pagina de releases:
+Download the latest version from the releases page:
 
-[**Download do Olheiro para Windows**](https://github.com/pedrotescaro/olheiro-desktop/releases/latest)
+[**Download Olheiro for Windows**](https://github.com/pedrotescaro/olheiro-desktop/releases/latest)
 
-Arquivos principais da release:
+Main release files:
 
-- `Olheiro_0.2.1_x64-setup.exe`: instalador recomendado para Windows.
-- `Olheiro_0.2.1_x64_en-US.msi`: instalador MSI alternativo.
+- `Olheiro_0.3.0_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.3.0_x64_en-US.msi`: alternative MSI installer.
 
-> O instalador inclui o app Tauri, o frontend React, o backend Python empacotado e os recursos necessarios para OCR quando o build foi gerado com Tesseract instalado.
+> The installer includes the Tauri app, React frontend, bundled Python backend and the resources needed for OCR when the build was generated with Tesseract installed.
 
-## O que e
+## What is it
 
-Olheiro e um assistente local de estudo. Ele ajuda a recortar uma parte da tela, extrair texto com OCR, copiar texto/imagem/prompt, abrir uma IA escolhida e colar o conteudo com controle do usuario.
+Olheiro is a local study assistant. It helps you crop part of your screen, extract text with OCR, copy text/image/prompt, open an AI of your choice, and paste the content under your control.
 
-Ele nao automatiza plataformas de curso, nao faz login em contas, nao salva senhas, nao envia mensagens automaticamente e nao pressiona Enter por voce.
+It does not automate course platforms, does not log in to accounts, does not save passwords, does not send messages automatically, and does not press Enter for you.
 
-## Principais recursos
+## Key features
 
-- Recorte de tela com cancelamento por `Esc`.
-- Salvamento em `captures/recorte_YYYYMMDD_HHMMSS.png`.
-- OCR local com Tesseract.
-- Preview do ultimo recorte.
-- Texto OCR editavel antes de copiar ou colar.
-- Prompt padrao editavel e salvo localmente.
-- Copia de OCR, prompt, imagem ou prompt + imagem.
-- Abertura de Gemini, ChatGPT, Claude, Copilot e Perplexity.
-- Icones reais das IAs.
-- Auto-copia opcional apos recorte.
-- Auto-colagem opcional com delay, sempre sem enviar Enter.
-- Scroll continuo local para cima ou para baixo.
-- Scroll bloqueado quando o mouse esta sobre a janela do Olheiro.
-- Sidebar fixa para manter o botao de parar scroll sempre acessivel.
-- Historico dos ultimos recortes da sessao.
-- Preferencias e capturas salvas localmente.
+- Screen capture with `Esc` to cancel.
+- Saves to `captures/recorte_YYYYMMDD_HHMMSS.png`.
+- Local OCR with Tesseract + image pre-processing (grayscale, upscale, contrast, binarization).
+- Preview of the last capture.
+- Editable OCR text before copy or paste.
+- Editable default prompt saved locally.
+- Copy OCR, prompt, image or prompt + image.
+- Open Gemini, ChatGPT, Claude, Copilot and Perplexity.
+- Real AI provider icons.
+- Optional auto-copy after capture.
+- Optional auto-paste with delay, never sending Enter.
+- Continuous local scroll up or down.
+- Scroll blocked when mouse is over the Olheiro window.
+- Fixed sidebar with collapse support for smaller windows.
+- **Capture history persisted across sessions.**
+- **Light / Dark / System theme.**
+- **English and Portuguese interface.**
+- **Option to reuse or open new AI tab.**
+- **Automatic update check via GitHub releases.**
+- Preferences and captures saved locally.
 
 ## Interface
 
-A interface foi reconstruida com **TypeScript + React + Tailwind + Tauri**, seguindo uma identidade visual baseada no logo Olheiro: azul escuro, ciano/teal e tons neutros.
+The interface is built with **TypeScript + React + Tailwind + Tauri**, following a visual identity based on the Olheiro logo: dark blue, cyan/teal and neutral tones.
 
-Ela usa:
+It features:
 
-- sidebar fixa;
-- cards organizados;
-- switches modernos;
-- status visivel;
-- selecao de IA com icones;
-- historico de acoes;
-- layout responsivo para telas menores e maiores.
+- Collapsible sidebar (compact mode with icons only);
+- Responsive layout that works from 420×340 up to any resolution;
+- Light, dark, and system-matched theme;
+- Language selector (Português / English);
+- Organized cards;
+- Modern switches;
+- Visible status indicator;
+- AI selection with icons;
+- Persistent action history;
+- Responsive layout for smaller and larger screens.
 
 ## Stack
 
-| Camada | Tecnologia |
+| Layer | Technology |
 | --- | --- |
 | Desktop | Tauri 2 |
 | Frontend | TypeScript, React, Tailwind, Vite |
-| Backend local | Python HTTP server |
-| OCR | Tesseract + pytesseract |
-| Clipboard / imagem | pywin32 |
-| Captura / mouse | Tkinter, Pillow, pynput |
-| Empacotamento | PyInstaller + Tauri bundle |
+| Backend | Python HTTP server |
+| OCR | Tesseract + pytesseract + Pillow pre-processing |
+| Clipboard / Image | pywin32 |
+| Capture / Mouse | Tkinter, Pillow, pynput |
+| Bundling | PyInstaller + Tauri bundle |
+| Auto-update | tauri-plugin-updater + GitHub releases |
 
-## Como rodar em desenvolvimento
+## Running in development
 
-Requisitos:
+Requirements:
 
-- Windows 10 ou superior.
+- Windows 10 or later.
 - Python 3.12+.
 - Node.js.
 - Rust/Cargo.
 - Tesseract OCR.
 
-Instale Rust:
+Install Rust:
 
 ```powershell
 winget install -e --id Rustlang.Rustup
 ```
 
-Instale Tesseract:
+Install Tesseract:
 
 ```powershell
 winget install UB-Mannheim.TesseractOCR
 ```
 
-Rode o app:
+Run the app:
 
 ```powershell
 .\run.bat
 ```
 
-Modo debug:
+Debug mode:
 
 ```powershell
 .\run.bat --debug
 ```
 
-Somente stack web/backend:
+Web/backend stack only:
 
 ```powershell
 npm run dev:stack
 ```
 
-## Gerar instalador
+## Build installer
 
-O script abaixo prepara dependencias, empacota o backend Python com PyInstaller, copia o Tesseract para o bundle e gera os instaladores Tauri:
+The script below prepares dependencies, packages the Python backend with PyInstaller, copies Tesseract to the bundle, and generates Tauri installers:
 
 ```powershell
 .\build_exe.bat
 ```
 
-Saidas:
+Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.2.1_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.2.1_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.0_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.3.0_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
-## Atalhos
+### Code signing (optional)
 
-| Atalho | Acao |
-| --- | --- |
-| `Ctrl+Shift+S` | Recortar tela |
-| `Ctrl+Shift+C` | Copiar OCR atual |
-| `Ctrl+Shift+V` | Colar conteudo escolhido |
-| `Ctrl+Shift+Down` | Scroll para baixo |
-| `Ctrl+Shift+Up` | Scroll para cima |
+Set the following environment variables before building to sign the installers:
 
-## Estrutura
-
-```text
-assets/                  Logo, favicon e icones
-backend_server.py         API local usada pelo frontend
-config/                   Caminhos, providers e preferencias
-models/                   Modelos de dados
-services/                 OCR, captura, clipboard, browser e scroll
-src/                      Frontend React/Tailwind
-src-tauri/                Shell desktop Tauri
-utils/                    Helpers de plataforma e imagem
-build_exe.bat             Build completo para Windows
-run.bat                   Launcher de desenvolvimento
-requirements.txt          Dependencias Python
-package.json              Scripts Node/Tauri
+```powershell
+$env:OLHEIRO_SIGN_CERT = "path\to\certificate.pfx"
+$env:OLHEIRO_SIGN_PASS = "certificate-password"
+.\build_exe.bat
 ```
 
-## Privacidade
+## Shortcuts
 
-O Olheiro roda localmente. Ele nao salva credenciais, cookies, tokens ou dados de login. As capturas ficam na maquina do usuario e a pasta `captures/` e ignorada pelo Git para evitar publicar prints pessoais.
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+Shift+S` | Capture screen |
+| `Ctrl+Shift+C` | Copy current OCR |
+| `Ctrl+Shift+V` | Paste selected content |
+| `Ctrl+Shift+Down` | Scroll down |
+| `Ctrl+Shift+Up` | Scroll up |
 
-Preferencias locais ficam em `settings.json` durante desenvolvimento e em `%LOCALAPPDATA%\Olheiro` no app empacotado.
+## Structure
 
-## Uso responsavel
+```text
+assets/                  Logo, favicon and icons
+backend_server.py        Local API used by frontend
+config/                  Paths, providers and settings
+models/                  Data models
+services/                OCR, capture, clipboard, browser and scroll
+src/                     React/Tailwind frontend
+  i18n.ts                Internationalization (PT/EN)
+  App.tsx                Main application component
+  types.ts               TypeScript types
+  styles.css             Theme-aware styles
+src-tauri/               Tauri desktop shell
+utils/                   Platform and image helpers
+build_exe.bat            Full build for Windows
+run.bat                  Development launcher
+requirements.txt         Python dependencies
+package.json             Node/Tauri scripts
+```
 
-Use o Olheiro para estudar e entender conteudos. Respeite regras de cursos, plataformas, provas e avaliacoes. O app foi desenhado para manter o usuario no controle: ele copia, cola e abre paginas, mas nao envia respostas e nao tenta burlar regras de nenhum site.
+## Privacy
+
+Olheiro runs locally. It does not save credentials, cookies, tokens, or login data. Captures stay on the user's machine and the `captures/` folder is ignored by Git to avoid publishing personal screenshots.
+
+Local preferences are stored in `settings.json` during development and in `%LOCALAPPDATA%\Olheiro` in the packaged app. Capture history is persisted in `history.json` in the same location.
+
+## Responsible use
+
+Use Olheiro to study and understand content. Respect course rules, platforms, exams and evaluations. The app is designed to keep the user in control: it copies, pastes and opens pages, but does not send answers and does not try to bypass any site's rules.
 
 ## Roadmap
 
-- Persistir historico entre sessoes.
-- Melhorar OCR com pre-processamento de imagem.
-- Criar tema claro/escuro.
-- Adicionar assinatura de codigo para reduzir alertas do Windows.
-- Criar atualizacao automatica via releases.
+- ~~Persist history across sessions.~~ ✅
+- ~~Improve OCR with image pre-processing.~~ ✅
+- ~~Create light/dark theme.~~ ✅
+- ~~Add English and Portuguese interface.~~ ✅
+- ~~Add reuse AI tab option.~~ ✅
+- ~~Prepare code signing infrastructure.~~ ✅
+- ~~Auto-update via GitHub releases.~~ ✅
+- Add more AI providers.
+- Support macOS and Linux.
+- Global hotkey registration outside the app window.

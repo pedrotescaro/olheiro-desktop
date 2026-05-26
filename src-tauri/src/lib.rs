@@ -12,6 +12,7 @@ struct BackendProcess(Mutex<Option<Child>>);
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let backend = spawn_backend(app);
             app.manage(BackendProcess(Mutex::new(backend)));

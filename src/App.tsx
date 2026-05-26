@@ -3,19 +3,28 @@ import {
   ArrowUp,
   Bot,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clipboard,
   Copy,
   ExternalLink,
   FileText,
+  Globe,
   Image as ImageIcon,
   Loader2,
+  Menu,
+  Moon,
   MousePointer2,
   Play,
+  RefreshCw,
   ScrollText,
   Square,
+  Sun,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE, api } from "./api";
+import { useI18n, type Locale } from "./i18n";
 import type { BackendState, Capture, Provider, Settings } from "./types";
 
 const pasteModes = ["Texto OCR", "Imagem", "Prompt", "Prompt + imagem"];
@@ -29,9 +38,12 @@ const fallbackSettings: Settings = {
   auto_paste_after_delay: false,
   save_captures: true,
   prompt_template:
-    "Estou estudando este conteudo. Explique em portugues, passo a passo, os conceitos principais do recorte. Se parecer questao de avaliacao, nao responda apenas com a alternativa final: me ajude a entender o raciocinio.",
+    "Estou estudando este conteúdo. Explique em português, passo a passo, os conceitos principais do recorte. Se parecer questao de avaliação, não responda apenas com a alternativa final: me ajude a entender o raciocínio.",
   scroll_speed: 4,
   history_limit: 8,
+  reuse_ai_tab: false,
+  theme: "system",
+  language: "pt",
 };
 
 export function App() {
@@ -39,8 +51,12 @@ export function App() {
   const [settings, setSettings] = useState<Settings>(fallbackSettings);
   const [ocrText, setOcrText] = useState("");
   const [promptTemplate, setPromptTemplate] = useState(fallbackSettings.prompt_template);
-  const [status, setStatus] = useState({ label: "Conectando backend", tone: "working" });
+  const [status, setStatus] = useState({ label: "status.connecting", tone: "working" });
   const [busy, setBusy] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const { t } = useI18n(settings.language as Locale);
 
   const providers = state?.providers ?? [];
   const current = state?.current ?? null;
@@ -48,6 +64,26 @@ export function App() {
     () => providers.find((provider) => provider.name === settings.ai_provider) ?? providers[0],
     [providers, settings.ai_provider],
   );
+
+  // Theme effect
+  useEffect(() => {
+    const applyTheme = () => {
+      let theme = settings.theme;
+      if (theme === "system") {
+        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", theme);
+    };
+
+    applyTheme();
+
+    if (settings.theme === "system") {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      const handler = () => applyTheme();
+      mq.addEventListener("change", handler);
+      return () => mq.removeEventListener("change", handler);
+    }
+  }, [settings.theme]);
 
   const applyState = useCallback((next: BackendState) => {
     setState(next);
@@ -59,9 +95,9 @@ export function App() {
   const refresh = useCallback(async () => {
     try {
       applyState(await api.state());
-      setStatus({ label: "Pronto", tone: "ready" });
+      setStatus({ label: "status.ready", tone: "ready" });
     } catch {
-      setStatus({ label: "Backend offline", tone: "error" });
+      setStatus({ label: "status.offline", tone: "error" });
     }
   }, [applyState]);
 
@@ -100,20 +136,20 @@ export function App() {
     try {
       applyState(await api.updateSettings(next));
     } catch {
-      setStatus({ label: "Falha ao salvar preferencias", tone: "error" });
+      setStatus({ label: "status.settingsError", tone: "error" });
     }
   }
 
   async function capture() {
     setBusy(true);
-    setStatus({ label: "Aguardando recorte", tone: "working" });
+    setStatus({ label: "status.waitingCrop", tone: "working" });
     try {
       const result = await api.capture();
       if (result.state) applyState(result.state);
-      setStatus(result.cancelled ? { label: "Recorte cancelado", tone: "ready" } : { label: "OCR concluido", tone: "success" });
+      setStatus(result.cancelled ? { label: "status.cropCancelled", tone: "ready" } : { label: "status.ocrDone", tone: "success" });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "Erro desconhecido";
-      setStatus({ label: `Erro ao recortar: ${detail}`, tone: "error" });
+      const detail = error instanceof Error ? error.message : t("status.unknownError");
+      setStatus({ label: `${t("status.cropError")}: ${detail}`, tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -121,7 +157,7 @@ export function App() {
 
   async function copyCurrent(mode = settings.paste_mode) {
     if (!current) {
-      setStatus({ label: "Nenhum recorte pronto", tone: "error" });
+      setStatus({ label: "status.noCapture", tone: "error" });
       return;
     }
     setBusy(true);
@@ -132,7 +168,7 @@ export function App() {
         prompt: buildPrompt(current, promptTemplate, ocrText),
       });
       if (result.state) applyState(result.state);
-      setStatus({ label: result.message ?? "Copiado", tone: result.ok ? "success" : "error" });
+      setStatus({ label: result.message ?? t("status.copied"), tone: result.ok ? "success" : "error" });
     } finally {
       setBusy(false);
     }
@@ -140,7 +176,7 @@ export function App() {
 
   async function pasteNow() {
     if (!current) {
-      setStatus({ label: "Nenhum recorte pronto", tone: "error" });
+      setStatus({ label: "status.noCapture", tone: "error" });
       return;
     }
     setBusy(true);
@@ -151,7 +187,7 @@ export function App() {
         prompt: buildPrompt(current, promptTemplate, ocrText),
       });
       if (result.state) applyState(result.state);
-      setStatus({ label: "Ctrl+V enviado sem Enter", tone: result.ok ? "success" : "error" });
+      setStatus({ label: "status.ctrlVSent", tone: result.ok ? "success" : "error" });
     } finally {
       setBusy(false);
     }
@@ -160,7 +196,7 @@ export function App() {
   async function openAi(provider = settings.ai_provider) {
     const result = await api.openAi(provider);
     if (result.state) applyState(result.state);
-    setStatus({ label: result.ok ? `${provider} aberto` : "Falha ao abrir IA", tone: result.ok ? "success" : "error" });
+    setStatus({ label: result.ok ? `${provider} ${t("status.openedAi")}` : t("status.openAiFail"), tone: result.ok ? "success" : "error" });
   }
 
   async function sendToChatGPT() {
@@ -173,88 +209,144 @@ export function App() {
     if (!captureItem) return;
     const result = await api.openImage(captureItem.imagePath);
     if (result.state) applyState(result.state);
-    setStatus({ label: result.message ?? "Imagem aberta", tone: result.ok ? "success" : "error" });
+    setStatus({ label: result.message ?? t("status.imageOpened"), tone: result.ok ? "success" : "error" });
   }
 
   async function scroll(direction: "up" | "down") {
     const result = await api.startScroll(direction, settings.scroll_speed);
     if (result.state) applyState(result.state);
-    setStatus({ label: direction === "down" ? "Scroll para baixo ativo" : "Scroll para cima ativo", tone: "scroll" });
+    setStatus({ label: direction === "down" ? "status.scrollDown" : "status.scrollUp", tone: "scroll" });
   }
 
   async function stopScroll() {
     const result = await api.stopScroll();
     if (result.state) applyState(result.state);
-    setStatus({ label: "Scroll parado", tone: "ready" });
+    setStatus({ label: "status.scrollStopped", tone: "ready" });
   }
 
+  function statusText(label: string): string {
+    // If it's a translation key, translate it. Otherwise return as-is.
+    if (label.includes(".")) {
+      const translated = t(label);
+      return translated !== label ? translated : label;
+    }
+    return label;
+  }
+
+  const themeIcon = settings.theme === "dark" ? <Moon size={15} /> : settings.theme === "light" ? <Sun size={15} /> : <RefreshCw size={13} />;
+
   return (
-    <div className="h-screen overflow-hidden bg-slate-950 text-slate-950">
-      <div className="grid h-screen grid-cols-[244px_minmax(0,1fr)] overflow-hidden">
-        <aside className="sticky top-0 flex h-screen flex-col bg-[#071d49] p-5 text-white">
-          <div className="flex items-center gap-3">
-            <img src={`${API_BASE}/assets/favicon.png`} className="h-11 w-11 object-contain" alt="Olheiro" />
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Olheiro</h1>
-              <p className="text-sm text-cyan-100/75">Assistente local de estudo</p>
+    <div className="h-screen overflow-hidden" style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}>
+      {/* Mobile sidebar overlay */}
+      {mobileMenuOpen && (
+        <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      {/* Mobile menu toggle */}
+      <button className="sidebar-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+        {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+      </button>
+
+      <div className="flex h-screen overflow-hidden">
+        {/* ─── Sidebar ─── */}
+        <aside
+          className={`sidebar ${sidebarCollapsed ? "collapsed" : ""} ${mobileMenuOpen ? "open" : ""} sticky top-0 flex h-screen flex-col p-4 text-white`}
+          style={{ background: "var(--bg-sidebar)" }}
+        >
+          <div className="sidebar-logo flex items-center gap-3">
+            <img src={`${API_BASE}/assets/favicon.png`} className="h-9 w-9 object-contain" alt="Olheiro" />
+            <div className="sidebar-title">
+              <h1 className="text-xl font-semibold tracking-tight">Olheiro</h1>
+              <p className="text-xs" style={{ color: "var(--text-sidebar-muted)" }}>{t("sidebar.subtitle")}</p>
             </div>
           </div>
 
-          <div className="mt-10 space-y-3">
-            <SidebarButton icon={<MousePointer2 size={18} />} label="Recortar tela" onClick={capture} primary />
-            <SidebarButton icon={<Bot size={18} />} label="Enviar para ChatGPT" onClick={sendToChatGPT} />
-            <SidebarButton icon={<Clipboard size={18} />} label="Colar agora" onClick={pasteNow} />
-            <SidebarButton icon={<Square size={18} />} label="Parar scroll" onClick={stopScroll} />
+          <div className="mt-8 space-y-2">
+            <SidebarButton icon={<MousePointer2 size={16} />} label={t("sidebar.capture")} onClick={capture} collapsed={sidebarCollapsed} primary />
+            <SidebarButton icon={<Bot size={16} />} label={t("sidebar.sendChatGPT")} onClick={sendToChatGPT} collapsed={sidebarCollapsed} />
+            <SidebarButton icon={<Clipboard size={16} />} label={t("sidebar.pasteNow")} onClick={pasteNow} collapsed={sidebarCollapsed} />
+            <SidebarButton icon={<Square size={16} />} label={t("sidebar.stopScroll")} onClick={stopScroll} collapsed={sidebarCollapsed} />
           </div>
 
-          <div className="mt-auto rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-cyan-50/75">
-            <p className="font-medium text-white">Controle do usuario</p>
-            <p className="mt-2 leading-relaxed">O app copia, cola e abre paginas, mas nao envia Enter nem automatiza sites de curso.</p>
+          {/* Theme / Language quick toggles */}
+          <div className="mt-6 space-y-2">
+            <SidebarButton
+              icon={themeIcon}
+              label={`${t("label.theme")}: ${t(`theme.${settings.theme}`)}`}
+              onClick={() => {
+                const next = settings.theme === "light" ? "dark" : settings.theme === "dark" ? "system" : "light";
+                void saveSettings({ theme: next });
+              }}
+              collapsed={sidebarCollapsed}
+            />
+            <SidebarButton
+              icon={<Globe size={15} />}
+              label={settings.language === "pt" ? "Português" : "English"}
+              onClick={() => void saveSettings({ language: settings.language === "pt" ? "en" : "pt" })}
+              collapsed={sidebarCollapsed}
+            />
           </div>
+
+          {/* Collapse toggle (desktop only) */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="mt-auto hidden items-center justify-center rounded-xl p-2 text-white/60 transition hover:bg-white/10 hover:text-white md:flex"
+          >
+            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+
+          {!sidebarCollapsed && (
+            <div className="sidebar-info mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs" style={{ color: "var(--text-sidebar-muted)" }}>
+              <p className="font-medium text-white">{t("sidebar.userControl")}</p>
+              <p className="mt-1.5 leading-relaxed">{t("sidebar.userControlDesc")}</p>
+            </div>
+          )}
         </aside>
 
-        <main className="h-screen overflow-y-auto bg-[#eef3f8] p-6 lg:p-8">
-          <header className="flex items-start justify-between gap-6">
+        {/* ─── Main ─── */}
+        <main className="main-content h-screen flex-1 overflow-y-auto p-4 lg:p-6" style={{ background: "var(--bg-app)" }}>
+          <header className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <img src={`${API_BASE}/assets/olheiro_trim.png`} className="h-16 w-auto object-contain" alt="Olheiro" />
-              <p className="mt-3 text-sm text-slate-600">Recorte, OCR, copia e colagem controlada para estudo.</p>
+              <img src={`${API_BASE}/assets/olheiro_trim.png`} className="h-12 w-auto object-contain" alt="Olheiro" />
+              <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>{t("misc.subtitle")}</p>
             </div>
-            <StatusPill label={status.label} tone={status.tone} busy={busy} />
+            <StatusPill label={statusText(status.label)} tone={status.tone} busy={busy} />
           </header>
 
-          <section className="mt-8 grid gap-6 2xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-            <div className="space-y-6">
-              <Card title="Configuracao da IA" subtitle="Escolha destino, conteudo, prompt e automacoes locais.">
-                <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
-                  <ProviderSelect providers={providers} value={settings.ai_provider} onChange={(ai_provider) => saveSettings({ ai_provider })} />
-                  <Select label="Conteudo" value={settings.paste_mode} options={pasteModes} onChange={(paste_mode) => saveSettings({ paste_mode })} />
-                  <button className="btn btn-dark mt-6 h-11 self-start" onClick={() => openAi()}>
-                    <ExternalLink size={17} />
-                    Abrir IA
+          <section className="mt-6 grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+            <div className="space-y-4">
+              <Card title={t("card.aiConfig")} subtitle={t("card.aiConfigSub")}>
+                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                  <ProviderSelect providers={providers} value={settings.ai_provider} onChange={(ai_provider) => saveSettings({ ai_provider })} label={t("label.ai")} />
+                  <Select label={t("label.content")} value={settings.paste_mode} options={pasteModes} onChange={(paste_mode) => saveSettings({ paste_mode })} />
+                  <button className="btn btn-dark mt-5 h-10 self-start" onClick={() => openAi()}>
+                    <ExternalLink size={15} />
+                    <span className="sidebar-label">{t("label.openAi")}</span>
                   </button>
                 </div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_170px]">
-                  <div className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <Switch label="Abrir IA apos recorte" checked={settings.auto_open_after_capture} onChange={(auto_open_after_capture) => saveSettings({ auto_open_after_capture })} />
-                      <Switch label="Copiar apos recorte" checked={settings.auto_copy_after_capture} onChange={(auto_copy_after_capture) => saveSettings({ auto_copy_after_capture })} />
-                      <Switch label="Colar apos delay" checked={settings.auto_paste_after_delay} onChange={(auto_paste_after_delay) => saveSettings({ auto_paste_after_delay })} />
-                      <Switch label="Salvar prints" checked={settings.save_captures} onChange={(save_captures) => saveSettings({ save_captures })} />
+                <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_150px]">
+                  <div className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Switch label={t("switch.openAfterCapture")} checked={settings.auto_open_after_capture} onChange={(auto_open_after_capture) => saveSettings({ auto_open_after_capture })} />
+                      <Switch label={t("switch.copyAfterCapture")} checked={settings.auto_copy_after_capture} onChange={(auto_copy_after_capture) => saveSettings({ auto_copy_after_capture })} />
+                      <Switch label={t("switch.pasteAfterDelay")} checked={settings.auto_paste_after_delay} onChange={(auto_paste_after_delay) => saveSettings({ auto_paste_after_delay })} />
+                      <Switch label={t("switch.saveCaptures")} checked={settings.save_captures} onChange={(save_captures) => saveSettings({ save_captures })} />
+                      <Switch label={t("switch.reuseAiTab")} checked={settings.reuse_ai_tab} onChange={(reuse_ai_tab) => saveSettings({ reuse_ai_tab })} />
                     </div>
                   </div>
                   <Select
-                    label="Delay"
+                    label={t("label.delay")}
                     value={String(settings.paste_delay_seconds)}
                     options={["3", "5", "8", "12"]}
                     onChange={(value) => saveSettings({ paste_delay_seconds: Number(value) })}
                   />
                 </div>
 
-                <div className="mt-5">
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="text-sm font-medium text-slate-700">Velocidade do scroll</label>
-                    <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">{settings.scroll_speed}/10</span>
+                <div className="mt-4">
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{t("label.scrollSpeed")}</label>
+                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-bg)", color: "var(--accent-text)" }}>{settings.scroll_speed}/10</span>
                   </div>
                   <input
                     type="range"
@@ -266,29 +358,35 @@ export function App() {
                   />
                 </div>
 
-                <label className="mt-5 block text-sm font-medium text-slate-700">Prompt padrao</label>
+                <label className="mt-4 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{t("label.defaultPrompt")}</label>
                 <textarea
                   value={promptTemplate}
                   onChange={(event) => setPromptTemplate(event.target.value)}
                   onBlur={() => saveSettings({ prompt_template: promptTemplate })}
-                  className="mt-2 min-h-28 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none ring-cyan-200 transition focus:border-cyan-400 focus:ring-4"
+                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+                  style={{
+                    borderColor: "var(--border-default)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    "--tw-ring-color": "var(--ring-focus)",
+                  } as React.CSSProperties}
                 />
               </Card>
 
-              <Card title="Acoes rapidas" subtitle="Comandos principais e atalhos de trabalho.">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <ActionButton icon={<MousePointer2 />} label="Recortar tela" onClick={capture} primary />
-                  <ActionButton icon={<FileText />} label="Copiar OCR" onClick={() => copyCurrent("Texto OCR")} />
-                  <ActionButton icon={<Clipboard />} label="Colar agora" onClick={pasteNow} />
-                  <ActionButton icon={<ArrowDown />} label="Scroll baixo" onClick={() => scroll("down")} subtle />
-                  <ActionButton icon={<ArrowUp />} label="Scroll cima" onClick={() => scroll("up")} subtle />
-                  <ActionButton icon={<Square />} label="Parar scroll" onClick={stopScroll} subtle />
+              <Card title={t("card.quickActions")} subtitle={t("card.quickActionsSub")}>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <ActionButton icon={<MousePointer2 />} label={t("btn.capture")} onClick={capture} primary />
+                  <ActionButton icon={<FileText />} label={t("btn.copyOcr")} onClick={() => copyCurrent("Texto OCR")} />
+                  <ActionButton icon={<Clipboard />} label={t("btn.pasteNow")} onClick={pasteNow} />
+                  <ActionButton icon={<ArrowDown />} label={t("btn.scrollDown")} onClick={() => scroll("down")} subtle />
+                  <ActionButton icon={<ArrowUp />} label={t("btn.scrollUp")} onClick={() => scroll("up")} subtle />
+                  <ActionButton icon={<Square />} label={t("btn.stopScroll")} onClick={stopScroll} subtle />
                 </div>
               </Card>
 
-              <Card title="Historico de recortes" subtitle="Ultimos recortes desta sessao.">
-                <div className="space-y-3">
-                  {(state?.history ?? []).length === 0 && <EmptyState text="Nenhum recorte nesta sessao ainda." />}
+              <Card title={t("card.history")} subtitle={t("card.historySub")}>
+                <div className="space-y-2">
+                  {(state?.history ?? []).length === 0 && <EmptyState text={t("misc.noHistory")} />}
                   {(state?.history ?? []).map((item) => (
                     <HistoryRow key={`${item.fileName}-${item.time}`} item={item} onCopy={() => copyHistory(item)} onOpen={() => openImage(item)} />
                   ))}
@@ -296,61 +394,67 @@ export function App() {
               </Card>
             </div>
 
-            <div className="space-y-6">
-              <Card title="Ultimo recorte e OCR" subtitle="Revise o texto antes de copiar ou colar.">
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+            <div className="space-y-4">
+              <Card title={t("card.lastCapture")} subtitle={t("card.lastCaptureSub")}>
+                <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border-default)", background: "var(--bg-input)" }}>
                   {current ? (
-                    <img src={`${API_BASE}${current.imageUrl}`} className="max-h-56 w-full object-contain" alt="Ultimo recorte" />
+                    <img src={`${API_BASE}${current.imageUrl}`} className="max-h-48 w-full object-contain" alt="" />
                   ) : (
-                    <div className="flex h-44 items-center justify-center text-sm text-slate-400">Preview do recorte</div>
+                    <div className="flex h-36 items-center justify-center text-xs" style={{ color: "var(--text-muted)" }}>{t("misc.previewPlaceholder")}</div>
                   )}
                 </div>
-                <div className="mt-4 flex items-start justify-between gap-3">
+                <div className="mt-3 flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-slate-900">{current?.fileName ?? "Nenhum recorte ainda"}</p>
-                    <p className="mt-1 text-sm text-slate-500">{current?.ocrStatus ?? "Use Recortar tela para iniciar."}</p>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{current?.fileName ?? t("misc.noCapture")}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{current?.ocrStatus ?? t("misc.useCaptureToStart")}</p>
                   </div>
-                  {current && <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{current.time}</span>}
+                  {current && <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--success-bg)", color: "var(--success)" }}>{current.time}</span>}
                 </div>
                 <textarea
                   value={ocrText}
                   onChange={(event) => setOcrText(event.target.value)}
                   disabled={!current}
-                  className="mt-4 min-h-44 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none ring-cyan-200 transition focus:border-cyan-400 focus:ring-4 disabled:text-slate-400"
-                  placeholder="Texto OCR aparece aqui."
+                  className="mt-3 min-h-36 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2 disabled:opacity-40"
+                  style={{
+                    borderColor: "var(--border-default)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    "--tw-ring-color": "var(--ring-focus)",
+                  } as React.CSSProperties}
+                  placeholder={t("misc.ocrPlaceholder")}
                 />
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button className="btn btn-dark" onClick={() => copyCurrent("Texto OCR")} disabled={!current}>
-                    <FileText size={17} />
-                    Copiar OCR
+                    <FileText size={15} />
+                    {t("btn.copyOcr")}
                   </button>
                   <button className="btn btn-soft" onClick={() => copyCurrent("Prompt")} disabled={!current}>
-                    <Copy size={17} />
-                    Copiar prompt
+                    <Copy size={15} />
+                    {t("btn.copyPrompt")}
                   </button>
                   <button className="btn btn-soft" onClick={() => copyCurrent("Imagem")} disabled={!current}>
-                    <ImageIcon size={17} />
-                    Copiar imagem
+                    <ImageIcon size={15} />
+                    {t("btn.copyImage")}
                   </button>
                   <button className="btn btn-soft" onClick={() => openImage()} disabled={!current}>
-                    <ExternalLink size={17} />
-                    Abrir imagem
+                    <ExternalLink size={15} />
+                    {t("btn.openImage")}
                   </button>
                 </div>
               </Card>
 
-              <Card title="Status do sistema" subtitle="Diagnostico rapido do app local.">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Metric label="OCR" value={state?.system.ocr ?? "Conectando"} />
-                  <Metric label="Scroll" value={state?.system.scroll ?? "Parado"} />
-                  <Metric label="Backend" value={state?.system.backend ?? "Offline"} />
-                  <Metric label="Captures" value={state?.system.captures ?? "Indisponivel"} />
+              <Card title={t("card.systemStatus")} subtitle={t("card.systemStatusSub")}>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Metric label={t("metric.ocr")} value={state?.system.ocr ?? t("metric.connecting")} />
+                  <Metric label={t("metric.scroll")} value={state?.system.scroll ?? t("metric.stopped")} />
+                  <Metric label={t("metric.backend")} value={state?.system.backend ?? t("metric.offline")} />
+                  <Metric label={t("metric.captures")} value={state?.system.captures ?? t("metric.unavailable")} />
                 </div>
               </Card>
 
-              <Card title="Log" subtitle="Eventos recentes.">
-                <div className="max-h-44 space-y-2 overflow-y-auto rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-                  {(state?.logs ?? []).length === 0 && <span>Nenhum evento ainda.</span>}
+              <Card title={t("card.log")} subtitle={t("card.logSub")}>
+                <div className="max-h-36 space-y-1 overflow-y-auto rounded-xl p-2 text-xs" style={{ background: "var(--bg-input)", color: "var(--text-secondary)" }}>
+                  {(state?.logs ?? []).length === 0 && <span>{t("misc.noLog")}</span>}
                   {(state?.logs ?? []).map((line, index) => (
                     <p key={`${line}-${index}`}>{line}</p>
                   ))}
@@ -365,7 +469,7 @@ export function App() {
 
   async function copyHistory(item: Capture) {
     await api.copy({ mode: "Texto OCR", ocrText: item.ocrText, prompt: item.prompt });
-    setStatus({ label: "Texto do historico copiado", tone: "success" });
+    setStatus({ label: "status.historyCopied", tone: "success" });
   }
 }
 
@@ -376,48 +480,53 @@ function buildPrompt(capture: Capture, template: string, text: string) {
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[22px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70">
-      <div className="mb-5">
-        <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+    <section
+      className="rounded-[18px] border p-4 transition-colors"
+      style={{ borderColor: "var(--border-default)", background: "var(--bg-card)", boxShadow: "var(--shadow-card)" }}
+    >
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+        {subtitle && <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
       </div>
       {children}
     </section>
   );
 }
 
-function SidebarButton({ icon, label, onClick, primary = false }: { icon: React.ReactNode; label: string; onClick: () => void; primary?: boolean }) {
+function SidebarButton({ icon, label, onClick, primary = false, collapsed = false }: { icon: React.ReactNode; label: string; onClick: () => void; primary?: boolean; collapsed?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className={
+      title={collapsed ? label : undefined}
+      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
         primary
-          ? "flex w-full items-center gap-3 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-          : "flex w-full items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
-      }
+          ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+          : "bg-white/10 text-white hover:bg-white/15"
+      } ${collapsed ? "justify-center" : ""}`}
     >
       {icon}
-      {label}
+      {!collapsed && <span className="sidebar-label">{label}</span>}
     </button>
   );
 }
 
-function ProviderSelect({ providers, value, onChange }: { providers: Provider[]; value: string; onChange: (value: string) => void }) {
+function ProviderSelect({ providers, value, onChange, label }: { providers: Provider[]; value: string; onChange: (value: string) => void; label: string }) {
   return (
     <div>
-      <label className="text-sm font-medium text-slate-700">IA</label>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
+      <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         {providers.map((provider) => (
           <button
             key={provider.name}
             onClick={() => onChange(provider.name)}
-            className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition ${
-              value === provider.name
-                ? "border-cyan-300 bg-cyan-50 text-slate-950 shadow-sm"
-                : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white"
-            }`}
+            className="flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition"
+            style={{
+              borderColor: value === provider.name ? "var(--border-focus)" : "var(--border-default)",
+              background: value === provider.name ? "var(--accent-bg)" : "var(--bg-card-alt)",
+              color: value === provider.name ? "var(--text-primary)" : "var(--text-secondary)",
+            }}
           >
-            <img src={`${API_BASE}${provider.icon}`} className="h-6 w-6 rounded-md object-contain" alt="" />
+            <img src={`${API_BASE}${provider.icon}`} className="h-5 w-5 rounded object-contain" alt="" />
             {provider.name}
           </button>
         ))}
@@ -429,11 +538,17 @@ function ProviderSelect({ providers, value, onChange }: { providers: Provider[];
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 outline-none ring-cyan-200 transition focus:border-cyan-400 focus:ring-4"
+        className="mt-1.5 h-10 w-full rounded-xl border px-2.5 text-xs font-medium outline-none transition focus:ring-2"
+        style={{
+          borderColor: "var(--border-default)",
+          background: "var(--bg-input)",
+          color: "var(--text-primary)",
+          "--tw-ring-color": "var(--ring-focus)",
+        } as React.CSSProperties}
       >
         {options.map((option) => (
           <option key={option}>{option}</option>
@@ -445,11 +560,15 @@ function Select({ label, value, options, onChange }: { label: string; value: str
 
 function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <button onClick={() => onChange(!checked)} className="flex min-h-12 items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100">
-      <span className={`flex h-6 w-11 shrink-0 items-center rounded-full p-1 transition ${checked ? "bg-cyan-400" : "bg-slate-300"}`}>
-        <span className={`h-4 w-4 rounded-full bg-white shadow transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
+    <button
+      onClick={() => onChange(!checked)}
+      className="flex min-h-10 items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition"
+      style={{ background: "var(--bg-input)" }}
+    >
+      <span className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition ${checked ? "bg-cyan-400" : ""}`} style={checked ? {} : { background: "var(--text-muted)" }}>
+        <span className={`h-4 w-4 rounded-full bg-white shadow transition ${checked ? "translate-x-4" : "translate-x-0"}`} />
       </span>
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
     </button>
   );
 }
@@ -465,10 +584,13 @@ function ActionButton({ icon, label, onClick, primary = false, subtle = false }:
 }
 
 function StatusPill({ label, tone, busy }: { label: string; tone: string; busy: boolean }) {
-  const color = tone === "error" ? "bg-red-500" : tone === "success" ? "bg-emerald-500" : tone === "working" ? "bg-amber-500" : "bg-cyan-500";
+  const color = tone === "error" ? "var(--error)" : tone === "success" ? "var(--success)" : tone === "working" ? "var(--warning)" : "var(--accent)";
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
-      {busy ? <Loader2 className="animate-spin text-cyan-500" size={16} /> : <span className={`h-2.5 w-2.5 rounded-full ${color}`} />}
+    <div
+      className="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold"
+      style={{ borderColor: "var(--border-default)", background: "var(--bg-card)", color: "var(--text-primary)" }}
+    >
+      {busy ? <Loader2 className="animate-spin" size={14} style={{ color: "var(--accent)" }} /> : <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
       {label}
     </div>
   );
@@ -476,29 +598,29 @@ function StatusPill({ label, tone, busy }: { label: string; tone: string; busy: 
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-2 break-words text-sm font-medium text-slate-800">{value}</p>
+    <div className="rounded-xl p-3" style={{ background: "var(--bg-input)" }}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="mt-1 break-words text-xs font-medium" style={{ color: "var(--text-primary)" }}>{value}</p>
     </div>
   );
 }
 
 function HistoryRow({ item, onCopy, onOpen }: { item: Capture; onCopy: () => void; onOpen: () => void }) {
   return (
-    <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 md:grid-cols-[76px_1fr_auto] md:items-center">
-      <img src={`${API_BASE}${item.imageUrl}`} className="h-14 w-20 rounded-xl border border-slate-200 object-cover" alt="" />
+    <div className="grid gap-2 rounded-xl p-2 md:grid-cols-[64px_1fr_auto] md:items-center" style={{ background: "var(--bg-input)" }}>
+      <img src={`${API_BASE}${item.imageUrl}`} className="h-12 w-16 rounded-lg border object-cover" style={{ borderColor: "var(--border-default)" }} alt="" />
       <div>
-        <p className="text-sm font-semibold text-slate-900">{item.fileName}</p>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{item.fileName}</p>
+        <p className="mt-0.5 text-[10px]" style={{ color: "var(--text-muted)" }}>
           {item.time} - {item.ocrStatus}
         </p>
       </div>
-      <div className="flex gap-2">
-        <button className="icon-btn" onClick={onCopy} title="Copiar texto">
-          <FileText size={16} />
+      <div className="flex gap-1.5">
+        <button className="icon-btn" onClick={onCopy} title="Copy text">
+          <FileText size={14} />
         </button>
-        <button className="icon-btn" onClick={onOpen} title="Abrir imagem">
-          <ExternalLink size={16} />
+        <button className="icon-btn" onClick={onOpen} title="Open image">
+          <ExternalLink size={14} />
         </button>
       </div>
     </div>
@@ -507,8 +629,8 @@ function HistoryRow({ item, onCopy, onOpen }: { item: Capture; onCopy: () => voi
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-      <ScrollText size={18} />
+    <div className="flex items-center gap-2 rounded-xl p-3 text-xs" style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}>
+      <ScrollText size={16} />
       {text}
     </div>
   );

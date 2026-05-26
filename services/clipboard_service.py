@@ -14,7 +14,7 @@ class ClipboardService:
 
     def copy_text(self, text: str) -> tuple[bool, str]:
         if not text.strip():
-            return False, "Nao ha texto para copiar."
+            return False, "Não há texto para copiar."
         try:
             import pyperclip
 
@@ -27,9 +27,9 @@ class ClipboardService:
 
     def copy_image(self, image_path: Path) -> tuple[bool, str]:
         if sys.platform != "win32":
-            return False, "Copiar imagem para a area de transferencia exige Windows."
+            return False, "Copiar imagem para a área de transferência exige Windows."
         if not image_path.exists():
-            return False, "A imagem do recorte nao foi encontrada."
+            return False, "A imagem do recorte não foi encontrada."
         try:
             import win32clipboard
             import win32con
@@ -45,15 +45,15 @@ class ClipboardService:
             finally:
                 win32clipboard.CloseClipboard()
         except Exception as exc:
-            return False, f"Nao foi possivel copiar a imagem: {str(exc).splitlines()[0]}"
+            return False, f"Não foi possivel copiar a imagem: {str(exc).splitlines()[0]}"
         return True, "Imagem copiada."
 
     def copy_text_and_image(self, text: str, image_path: Path) -> tuple[bool, str]:
         if sys.platform != "win32":
             self.copy_text(text)
-            return False, "Texto copiado. Copia de imagem junto exige Windows."
+            return False, "Texto copiado. Cópia de imagem junto exige Windows."
         if not image_path.exists():
-            return False, "A imagem do recorte nao foi encontrada."
+            return False, "A imagem do recorte não foi encontrada."
         try:
             import win32clipboard
             import win32con
@@ -84,7 +84,7 @@ class ClipboardService:
             return self.copy_text(prompt)
         if mode == "Prompt + imagem":
             return self.copy_text_and_image(prompt, image_path)
-        return False, "Modo de copia desconhecido."
+        return False, "Modo de cópia desconhecido."
 
     def _image_to_dib(self, image_path: Path) -> bytes:
         output = BytesIO()

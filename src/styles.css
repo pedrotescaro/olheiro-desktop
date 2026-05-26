@@ -1,5 +1,88 @@
 @import "tailwindcss";
 
+/* ─── Design tokens ─── */
+:root {
+  /* Light theme (default) */
+  --bg-app: #eef3f8;
+  --bg-sidebar: #071d49;
+  --bg-card: #ffffff;
+  --bg-card-alt: #f8fafc;
+  --bg-input: #f1f5f9;
+  --bg-hover: #f1f5f9;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-sidebar: #ffffff;
+  --text-sidebar-muted: rgba(207, 250, 254, 0.75);
+
+  --border-default: #e2e8f0;
+  --border-focus: #22d3ee;
+  --ring-focus: rgba(34, 211, 238, 0.25);
+
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-bg: #ecfeff;
+  --accent-text: #0e7490;
+
+  --success: #10b981;
+  --success-bg: #ecfdf5;
+  --error: #ef4444;
+  --warning: #f59e0b;
+
+  --btn-dark-bg: #071d49;
+  --btn-dark-hover: #10306f;
+  --btn-dark-text: #ffffff;
+  --btn-soft-bg: #f8fafc;
+  --btn-soft-border: #dbe6ef;
+  --btn-soft-hover-bg: #ecfeff;
+  --btn-soft-hover-border: #bae6fd;
+
+  --shadow-card: 0 1px 3px rgba(148, 163, 184, 0.15);
+  --radius-card: 22px;
+  --radius-btn: 1rem;
+}
+
+[data-theme="dark"] {
+  --bg-app: #0f172a;
+  --bg-sidebar: #0a1628;
+  --bg-card: #1e293b;
+  --bg-card-alt: #1a2332;
+  --bg-input: #0f172a;
+  --bg-hover: #334155;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-sidebar: #f1f5f9;
+  --text-sidebar-muted: rgba(207, 250, 254, 0.6);
+
+  --border-default: #334155;
+  --border-focus: #06b6d4;
+  --ring-focus: rgba(6, 182, 212, 0.3);
+
+  --accent: #06b6d4;
+  --accent-hover: #22d3ee;
+  --accent-bg: rgba(6, 182, 212, 0.15);
+  --accent-text: #67e8f9;
+
+  --success: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.15);
+  --error: #f87171;
+  --warning: #fbbf24;
+
+  --btn-dark-bg: #0f172a;
+  --btn-dark-hover: #1e293b;
+  --btn-dark-text: #f1f5f9;
+  --btn-soft-bg: #1e293b;
+  --btn-soft-border: #334155;
+  --btn-soft-hover-bg: rgba(6, 182, 212, 0.1);
+  --btn-soft-hover-border: #0e7490;
+
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Base ─── */
 * {
   box-sizing: border-box;
 }
@@ -20,7 +103,9 @@ body {
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  background: #eef3f8;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 button,
@@ -30,16 +115,19 @@ input {
   font: inherit;
 }
 
+/* ─── Buttons ─── */
 .btn {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  border-radius: 1rem;
-  padding: 0.68rem 1rem;
-  font-size: 0.9rem;
+  gap: 0.5rem;
+  border-radius: var(--radius-btn);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
   font-weight: 700;
+  cursor: pointer;
+  border: none;
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
@@ -57,50 +145,163 @@ input {
 }
 
 .btn-primary {
-  background: #22d3ee;
-  color: #06213f;
+  background: var(--accent);
+  color: var(--btn-dark-bg);
 }
 
 .btn-primary:hover {
-  background: #67e8f9;
+  background: var(--accent-hover);
 }
 
 .btn-dark {
-  background: #071d49;
-  color: #ffffff;
+  background: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
 }
 
 .btn-dark:hover {
-  background: #10306f;
+  background: var(--btn-dark-hover);
 }
 
 .btn-soft {
-  border: 1px solid #dbe6ef;
-  background: #f8fafc;
-  color: #0f1f35;
+  border: 1px solid var(--btn-soft-border);
+  background: var(--btn-soft-bg);
+  color: var(--text-primary);
 }
 
 .btn-soft:hover {
-  border-color: #bae6fd;
-  background: #ecfeff;
+  border-color: var(--btn-soft-hover-border);
+  background: var(--btn-soft-hover-bg);
 }
 
 .icon-btn {
   display: inline-flex;
-  height: 36px;
-  width: 36px;
+  height: 32px;
+  width: 32px;
   align-items: center;
   justify-content: center;
-  border-radius: 0.85rem;
-  border: 1px solid #dbe6ef;
-  background: #ffffff;
-  color: #0f1f35;
+  border-radius: 0.7rem;
+  border: 1px solid var(--btn-soft-border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
   transition:
     background-color 160ms ease,
     border-color 160ms ease;
 }
 
 .icon-btn:hover {
-  border-color: #bae6fd;
-  background: #ecfeff;
+  border-color: var(--btn-soft-hover-border);
+  background: var(--btn-soft-hover-bg);
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ─── Responsive sidebar ─── */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  transition: width 200ms ease, min-width 200ms ease, padding 200ms ease;
+}
+
+.sidebar.collapsed {
+  width: 56px;
+  min-width: 56px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.sidebar.collapsed .sidebar-label,
+.sidebar.collapsed .sidebar-info,
+.sidebar.collapsed .sidebar-title {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo img {
+  width: 32px;
+  height: 32px;
+}
+
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 50;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+  color: white;
+  border: none;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 680px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 250ms ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 39;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    padding-top: 52px !important;
+  }
+}
+
+/* ─── Smooth transitions for theme ─── */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color 300ms ease,
+    color 300ms ease,
+    border-color 300ms ease,
+    box-shadow 300ms ease !important;
 }

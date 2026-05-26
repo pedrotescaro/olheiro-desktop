@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 import tkinter as tk
 
-from config.paths import ASSETS_DIR, CAPTURES_DIR, ROOT_DIR
+from config.paths import ASSETS_DIR, CAPTURES_DIR, HISTORY_PATH, ROOT_DIR
 from config.providers import AI_PROVIDERS, DEFAULT_PROVIDER, PROVIDERS_BY_NAME
 from config.settings import AppSettings, load_settings, save_settings
 from models.capture import CaptureResult
@@ -42,6 +42,7 @@ class BackendState:
         self.scroll_service = ScrollService(self._log)
         self.current: Optional[CaptureResult] = None
         self.history: list[CaptureResult] = []
+        self._load_history()
         self.logs: list[str] = []
 
     def close(self) -> None:
@@ -52,6 +53,32 @@ class BackendState:
         stamp = datetime.now().strftime("%H:%M:%S")
         self.logs.insert(0, f"[{stamp}] {message}")
         self.logs = self.logs[:40]
+
+    def _load_history(self) -> None:
+        if not HISTORY_PATH.exists():
+            return
+        try:
+            data = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                for item in data[:self.settings.history_limit]:
+                    try:
+                        capture = CaptureResult.from_dict(item)
+                        if capture.image_path.exists():
+                            self.history.append(capture)
+                    except (KeyError, ValueError):
+                        continue
+                if self.history:
+                    self.current = self.history[0]
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    def _save_history(self) -> None:
+        try:
+            HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+            data = [item.to_dict() for item in self.history]
+            HISTORY_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -108,6 +135,7 @@ class BackendState:
         self.current = result
         self.history.insert(0, result)
         self.history = self.history[: self.settings.history_limit]
+        self._save_history()
         self._log(result.ocr_status)
 
         if self.settings.auto_copy_after_capture:
@@ -144,13 +172,13 @@ class BackendState:
                 time.sleep(0.9)
                 self.clipboard_service.copy_text(prompt_text)
                 paste_hotkey()
-                self._log("Imagem e prompt colados. Enter nao foi enviado.")
+                self._log("Imagem e prompt colados. Enter não foi enviado.")
                 return self._message(True, "Imagem e prompt colados.")
             return self._message(False, message)
 
         copy_result = self.copy_content(mode, text, prompt_text)
         paste_hotkey()
-        self._log("Ctrl+V enviado. Enter nao foi enviado.")
+        self._log("Ctrl+V enviado. Enter não foi enviado.")
         return copy_result
 
     def schedule_paste(self, mode: str, ocr_text: str | None = None, prompt: str | None = None) -> dict[str, Any]:
@@ -165,21 +193,21 @@ class BackendState:
 
     def open_ai(self, provider_name: str) -> dict[str, Any]:
         provider = PROVIDERS_BY_NAME.get(provider_name, PROVIDERS_BY_NAME[DEFAULT_PROVIDER])
-        ok, message = self.browser_service.open_url(provider.url)
+        ok, message = self.browser_service.open_url(provider.url, reuse_tab=self.settings.reuse_ai_tab)
         self._log(f"{provider.name}: {message}")
         return self._message(ok, message)
 
     def open_current_image(self, image_path: str | None = None) -> dict[str, Any]:
         path = Path(image_path) if image_path else (self.current.image_path if self.current else None)
         if path is None or not path.exists():
-            return self._message(False, "Imagem nao encontrada.")
+            return self._message(False, "Imagem não encontrada.")
         try:
             if os.name == "nt":
                 os.startfile(path)  # type: ignore[attr-defined]
             else:
                 self.browser_service.open_url(path.resolve().as_uri())
         except Exception as exc:
-            return self._message(False, f"Nao foi possivel abrir a imagem: {str(exc).splitlines()[0]}")
+            return self._message(False, f"Não foi possivel abrir a imagem: {str(exc).splitlines()[0]}")
         return self._message(True, "Imagem aberta.")
 
     def start_scroll(self, direction: str, speed: int | None = None) -> dict[str, Any]:
@@ -216,7 +244,7 @@ def build_prompt(template: str, result: CaptureResult, ocr_text: str) -> str:
     return (
         f"{template.strip()}\n\n"
         f"Arquivo do recorte salvo em:\n{result.image_path.resolve()}\n\n"
-        f"Texto extraido por OCR:\n{text_block}\n"
+        f"Texto extraído por OCR:\n{text_block}\n"
     )
 
 
@@ -296,7 +324,7 @@ class OlheiroHandler(BaseHTTPRequestHandler):
                 return
             self._send_file(image_path)
             return
-        self._send_json({"ok": False, "message": "Rota nao encontrada."}, status=404)
+        self._send_json({"ok": False, "message": "Rota não encontrada."}, status=404)
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
@@ -313,7 +341,7 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         }
         action = routes.get(parsed.path)
         if action is None:
-            self._send_json({"ok": False, "message": "Rota nao encontrada."}, status=404)
+            self._send_json({"ok": False, "message": "Rota não encontrada."}, status=404)
             return
         try:
             self._send_json(action())
@@ -346,14 +374,14 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         try:
             resolved = path.resolve()
         except OSError:
-            self._send_json({"ok": False, "message": "Arquivo invalido."}, status=404)
+            self._send_json({"ok": False, "message": "Arquivo inválido."}, status=404)
             return
         allowed_roots = (ASSETS_DIR.resolve(), CAPTURES_DIR.resolve(), (Path(__file__).resolve().parent / "captures").resolve(), Path(os.getenv("TEMP", ".")).resolve())
         if not any(str(resolved).startswith(str(root)) for root in allowed_roots):
             self._send_json({"ok": False, "message": "Arquivo bloqueado."}, status=403)
             return
         if not resolved.exists() or not resolved.is_file():
-            self._send_json({"ok": False, "message": "Arquivo nao encontrado."}, status=404)
+            self._send_json({"ok": False, "message": "Arquivo não encontrado."}, status=404)
             return
         content = resolved.read_bytes()
         content_type = "image/png" if resolved.suffix.lower() == ".png" else "application/octet-stream"

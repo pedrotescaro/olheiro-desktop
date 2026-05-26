@@ -27,7 +27,6 @@ if not exist "node_modules" (
 if not exist "%CARGO_BIN%\cargo.exe" (
   echo Rust/Cargo nao encontrado. Instale com:
   echo winget install -e --id Rustlang.Rustup
-  pause
   exit /b 1
 )
 
@@ -39,7 +38,6 @@ if exist "%TESSERACT_SRC%\tesseract.exe" (
   echo [Olheiro] Tesseract nao encontrado em %TESSERACT_SRC%.
   echo Para gerar um instalador portatil com OCR, instale antes:
   echo winget install UB-Mannheim.TesseractOCR
-  pause
   exit /b 1
 )
 
@@ -57,14 +55,24 @@ set "PATH=%CARGO_BIN%;%PATH%"
 cmd /c npm run tauri -- build
 if errorlevel 1 exit /b 1
 
+if defined OLHEIRO_SIGN_CERT (
+  echo [Olheiro] Assinando executaveis...
+  signtool sign /fd SHA256 /f "%OLHEIRO_SIGN_CERT%" /p "%OLHEIRO_SIGN_PASS%" /t http://timestamp.digicert.com "src-tauri\target\release\olheiro.exe"
+  for %%f in (src-tauri\target\release\bundle\nsis\*.exe src-tauri\target\release\bundle\msi\*.msi) do (
+    signtool sign /fd SHA256 /f "%OLHEIRO_SIGN_CERT%" /p "%OLHEIRO_SIGN_PASS%" /t http://timestamp.digicert.com "%%f"
+  )
+  echo [Olheiro] Assinatura concluida.
+) else (
+  echo [Olheiro] Sem certificado. Defina OLHEIRO_SIGN_CERT para assinar.
+)
+
 echo.
 echo [Olheiro] Build finalizado.
 echo Instalador EXE:
-echo src-tauri\target\release\bundle\nsis\Olheiro_0.2.1_x64-setup.exe
+echo src-tauri\target\release\bundle\nsis\Olheiro_0.3.0_x64-setup.exe
 echo.
 echo Instalador MSI:
-echo src-tauri\target\release\bundle\msi\Olheiro_0.2.1_x64_en-US.msi
+echo src-tauri\target\release\bundle\msi\Olheiro_0.3.0_x64_en-US.msi
 echo.
 echo Executavel de release para teste local:
 echo src-tauri\target\release\olheiro.exe
-pause

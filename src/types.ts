@@ -26,6 +26,9 @@ export type Settings = {
   prompt_template: string;
   scroll_speed: number;
   history_limit: number;
+  reuse_ai_tab: boolean;
+  theme: "light" | "dark" | "system";
+  language: "pt" | "en";
 };
 
 export type BackendState = {
