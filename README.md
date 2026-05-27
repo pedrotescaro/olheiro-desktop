@@ -27,10 +27,10 @@ Download the latest version from the releases page:
 
 Main release files:
 
-- `Olheiro_0.3.5_x64-setup.exe`: recommended installer for Windows.
-- `Olheiro_0.3.5_x64_en-US.msi`: alternative MSI installer.
+- `Olheiro_0.3.6_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.3.6_x64_en-US.msi`: alternative MSI installer.
 
-> The installer includes the Tauri app, React frontend, bundled Python backend and the resources needed for OCR when the build was generated with Tesseract installed.
+> The installer includes the Tauri app, React frontend, bundled Python backend and a portable Tesseract OCR runtime with `eng`, `por`, `spa` and `osd` language data.
 
 ## What is it
 
@@ -42,7 +42,7 @@ It does not automate course platforms, does not log in to accounts, does not sav
 
 - Screen capture with `Esc` to cancel.
 - Saves to `captures/recorte_YYYYMMDD_HHMMSS.png`.
-- Local OCR with Tesseract, selectable language and reprocessing modes.
+- Local OCR with bundled portable Tesseract, selectable language and reprocessing modes.
 - Preview of the last capture.
 - Editable OCR text before copy or paste.
 - Editable default prompt saved locally.
@@ -59,7 +59,7 @@ It does not automate course platforms, does not log in to accounts, does not sav
 - **Capture history persisted across sessions.**
 - **Light / Dark / System theme.**
 - **English and Portuguese interface.**
-- **Dedicated local dispatcher tab to reuse the same AI tab more reliably.**
+- **Direct IA opening; no local dispatcher tab between Olheiro and the selected IA.**
 - **Mini floating panel with capture, send, paste and stop-scroll controls.**
 - **Privacy tools to clear history/captures and auto-delete old captures.**
 - **Copy diagnostic log for faster bug reports.**
@@ -108,7 +108,7 @@ Requirements:
 - Python 3.12+.
 - Node.js.
 - Rust/Cargo.
-- Tesseract OCR.
+- Tesseract OCR is optional in development. `build_exe.bat` prepares a portable runtime automatically.
 
 Install Rust:
 
@@ -116,10 +116,10 @@ Install Rust:
 winget install -e --id Rustlang.Rustup
 ```
 
-Install Tesseract:
+Prepare portable OCR runtime manually when needed:
 
 ```powershell
-winget install UB-Mannheim.TesseractOCR
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ensure_tesseract.ps1
 ```
 
 Run the app:
@@ -142,7 +142,7 @@ npm run dev:stack
 
 ## Build installer
 
-The script below prepares dependencies, packages the Python backend with PyInstaller, copies Tesseract to the bundle, and generates Tauri installers:
+The script below prepares dependencies, downloads or copies a portable Tesseract runtime, packages the Python backend with PyInstaller, and generates Tauri installers:
 
 ```powershell
 .\build_exe.bat
@@ -150,8 +150,8 @@ The script below prepares dependencies, packages the Python backend with PyInsta
 
 Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.5_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.3.5_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.6_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.3.6_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ### Code signing (optional)
@@ -182,6 +182,7 @@ backend_server.py        Local API used by frontend
 config/                  Paths, providers and settings
 models/                  Data models
 services/                OCR, capture, clipboard, browser and scroll
+scripts/                 Build helpers, including portable Tesseract setup
 src/                     React/Tailwind frontend
   i18n.ts                Internationalization (PT/EN)
   App.tsx                Main application component
@@ -211,7 +212,7 @@ Use Olheiro to study and understand content. Respect course rules, platforms, ex
 - ~~Improve OCR with image pre-processing.~~ ✅
 - ~~Create light/dark theme.~~ ✅
 - ~~Add English and Portuguese interface.~~ ✅
-- ~~Add reuse AI tab option with a dedicated local dispatcher.~~ ✅
+- ~~Add direct AI opening with optional browser-tab reuse.~~ ✅
 - ~~Add study profiles, OCR reprocess controls, privacy cleanup and diagnostics.~~ ✅
 - ~~Prepare code signing infrastructure.~~ ✅
 - ~~Auto-update via GitHub releases.~~ ✅

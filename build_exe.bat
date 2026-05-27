@@ -4,7 +4,6 @@ cd /d "%~dp0"
 
 set "PYTHON=python"
 set "VENV_PY=.venv\Scripts\python.exe"
-set "TESSERACT_SRC=C:\Program Files\Tesseract-OCR"
 set "TESSERACT_VENDOR=vendor\tesseract"
 set "CARGO_BIN=%USERPROFILE%\.cargo\bin"
 
@@ -30,16 +29,9 @@ if not exist "%CARGO_BIN%\cargo.exe" (
   exit /b 1
 )
 
-if exist "%TESSERACT_SRC%\tesseract.exe" (
-  echo [Olheiro] Copiando Tesseract para bundle portatil...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force -Path '%TESSERACT_VENDOR%' | Out-Null; Copy-Item -LiteralPath '%TESSERACT_SRC%\*' -Destination '%TESSERACT_VENDOR%' -Recurse -Force"
-) else (
-  echo.
-  echo [Olheiro] Tesseract nao encontrado em %TESSERACT_SRC%.
-  echo Para gerar um instalador portatil com OCR, instale antes:
-  echo winget install UB-Mannheim.TesseractOCR
-  exit /b 1
-)
+echo [Olheiro] Preparando Tesseract portatil para OCR...
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\ensure_tesseract.ps1" -VendorDir "%TESSERACT_VENDOR%"
+if errorlevel 1 exit /b 1
 
 echo [Olheiro] Gerando backend portatil...
 "%VENV_PY%" -m PyInstaller --noconfirm --clean --noconsole --onefile --name olheiro-backend --hidden-import win32clipboard --hidden-import win32con --hidden-import pywintypes --add-data "assets;assets" --add-data "vendor\tesseract;tesseract" backend_server.py
@@ -69,10 +61,10 @@ if defined OLHEIRO_SIGN_CERT (
 echo.
 echo [Olheiro] Build finalizado.
 echo Instalador EXE:
-echo src-tauri\target\release\bundle\nsis\Olheiro_0.3.5_x64-setup.exe
+echo src-tauri\target\release\bundle\nsis\Olheiro_0.3.6_x64-setup.exe
 echo.
 echo Instalador MSI:
-echo src-tauri\target\release\bundle\msi\Olheiro_0.3.5_x64_en-US.msi
+echo src-tauri\target\release\bundle\msi\Olheiro_0.3.6_x64_en-US.msi
 echo.
 echo Executavel de release para teste local:
 echo src-tauri\target\release\olheiro.exe

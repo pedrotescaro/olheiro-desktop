@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,19 +28,23 @@ class OCRService:
             self.status = "OCR indisponível: pytesseract não foi encontrado."
             return self.status
 
-        found = shutil.which("tesseract")
         bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
         candidates = [
-            found,
             bundle_dir / "tesseract" / "tesseract.exe",
             Path(__file__).resolve().parents[1] / "vendor" / "tesseract" / "tesseract.exe",
+            shutil.which("tesseract"),
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
         ]
         for candidate in candidates:
             if candidate and Path(candidate).exists():
-                pytesseract.pytesseract.tesseract_cmd = str(candidate)
-                self.status = "OCR pronto."
+                exe_path = Path(candidate)
+                tessdata_dir = exe_path.parent / "tessdata"
+                if tessdata_dir.exists():
+                    os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+                pytesseract.pytesseract.tesseract_cmd = str(exe_path)
+                source = "portatil" if "tesseract" in str(exe_path).lower() and str(bundle_dir).lower() in str(exe_path).lower() else "local"
+                self.status = f"OCR pronto ({source})."
                 return self.status
 
         self.status = "OCR instalado, mas tesseract.exe não foi localizado."

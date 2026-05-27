@@ -437,19 +437,27 @@ export function App() {
           <section className="mt-6 grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
             <div className="space-y-4">
               <Card title={t("card.aiConfig")} subtitle={t("card.aiConfigSub")}>
-                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                <div className="grid gap-3 xl:grid-cols-[minmax(160px,0.8fr)_minmax(320px,1.4fr)_minmax(160px,0.8fr)_auto]">
                   <Select label="Perfil de estudo" value={settings.study_profile} options={studyProfiles.map((profile) => profile.name)} onChange={(profile) => applyStudyProfile(profile)} />
-                  <ProviderSelect providers={providers} value={settings.ai_provider} onChange={(ai_provider) => saveSettings({ ai_provider })} label={t("label.ai")} />
+                  <ProviderSelect
+                    providers={providers}
+                    value={settings.ai_provider}
+                    onChange={(ai_provider) => {
+                      void saveSettings({ ai_provider });
+                      void openAi(ai_provider);
+                    }}
+                    label={t("label.ai")}
+                  />
                   <Select label={t("label.content")} value={settings.paste_mode} options={pasteModes} onChange={(paste_mode) => saveSettings({ paste_mode })} />
-                  <button className="btn btn-dark mt-5 h-10 self-start" onClick={() => openAi()}>
+                  <button className="btn btn-dark h-10 self-end" onClick={() => openAi()}>
                     <ExternalLink size={15} />
                     <span className="sidebar-label">{t("label.openAi")}</span>
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_150px]">
+                <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_150px]">
                   <div className="space-y-2">
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
                       <Switch label={t("switch.openAfterCapture")} checked={settings.auto_open_after_capture} onChange={(auto_open_after_capture) => saveSettings({ auto_open_after_capture })} />
                       <Switch label={t("switch.copyAfterCapture")} checked={settings.auto_copy_after_capture} onChange={(auto_copy_after_capture) => saveSettings({ auto_copy_after_capture })} />
                       <Switch label={t("switch.pasteAfterDelay")} checked={settings.auto_paste_after_delay} onChange={(auto_paste_after_delay) => saveSettings({ auto_paste_after_delay })} />
@@ -481,10 +489,10 @@ export function App() {
                   />
                 </div>
 
-                <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(160px,1fr)_minmax(170px,1fr)_auto]">
                   <Select label="Idioma OCR" value={settings.ocr_language} options={ocrLanguages} onChange={(ocr_language) => saveSettings({ ocr_language })} />
                   <Select label="Preprocessamento" value={settings.ocr_preprocess} options={ocrModes} onChange={(ocr_preprocess) => saveSettings({ ocr_preprocess })} />
-                  <button className="btn btn-soft mt-5 h-10 self-start" onClick={reprocessOcr} disabled={!current || busy}>
+                  <button className="btn btn-soft h-10 self-end" onClick={reprocessOcr} disabled={!current || busy}>
                     <Wand2 size={15} />
                     Reprocessar OCR
                   </button>
@@ -686,7 +694,7 @@ function MiniPanel({ status, busy, onCapture, onPaste, onStopScroll, onSend }: {
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <section
-      className="rounded-[18px] border p-4 transition-colors"
+      className="min-w-0 overflow-hidden rounded-[18px] border p-4 transition-colors"
       style={{ borderColor: "var(--border-default)", background: "var(--bg-card)", boxShadow: "var(--shadow-card)" }}
     >
       <div className="mb-4">
@@ -717,14 +725,14 @@ function SidebarButton({ icon, label, onClick, primary = false, collapsed = fals
 
 function ProviderSelect({ providers, value, onChange, label }: { providers: Provider[]; value: string; onChange: (value: string) => void; label: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
-      <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+      <div className="mt-1.5 grid gap-1.5 [grid-template-columns:repeat(auto-fit,minmax(128px,1fr))]">
         {providers.map((provider) => (
           <button
             key={provider.name}
             onClick={() => onChange(provider.name)}
-            className="flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition"
+            className="flex min-w-0 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition"
             style={{
               borderColor: value === provider.name ? "var(--border-focus)" : "var(--border-default)",
               background: value === provider.name ? "var(--accent-bg)" : "var(--bg-card-alt)",
@@ -732,7 +740,7 @@ function ProviderSelect({ providers, value, onChange, label }: { providers: Prov
             }}
           >
             <img src={`${API_BASE}${provider.icon}`} className="h-5 w-5 rounded object-contain" alt="" />
-            {provider.name}
+            <span className="truncate">{provider.name}</span>
           </button>
         ))}
       </div>
@@ -742,7 +750,7 @@ function ProviderSelect({ providers, value, onChange, label }: { providers: Prov
 
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
       <select
         value={value}
@@ -781,7 +789,7 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
 function ActionButton({ icon, label, onClick, primary = false, subtle = false }: { icon: React.ReactNode; label: string; onClick: () => void; primary?: boolean; subtle?: boolean }) {
   const className = primary ? "btn btn-primary" : subtle ? "btn btn-soft" : "btn btn-dark";
   return (
-    <button className={className} onClick={onClick}>
+    <button className={`${className} min-w-0`} onClick={onClick}>
       {icon}
       {label}
     </button>
