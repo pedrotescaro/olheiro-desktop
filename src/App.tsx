@@ -32,12 +32,41 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE, api } from "./api";
 import { useI18n, type Locale } from "./i18n";
-import type { BackendState, Capture, Provider, Settings } from "./types";
+import type { BackendState, Capture, CourseContext, CourseState, Provider, Settings } from "./types";
 
 const pasteModes = ["Texto OCR", "Imagem", "Prompt", "Prompt + imagem"];
 const ocrLanguages = ["por+eng", "por", "eng", "spa", "eng+por"];
 const ocrModes = ["balanced", "high_contrast", "raw"];
 const retentionOptions = ["0", "1", "7", "15", "30", "90"];
+const contentTypeOptions = ["texto", "video", "atividade", "quiz_estudo", "recurso"];
+const statusOptions = ["nao_iniciado", "em_andamento", "revisado", "concluido"];
+const coursePromptOrder = [
+  "text_lesson",
+  "video",
+  "activity",
+  "quick_review",
+  "executive_summary",
+  "glossary",
+  "step_by_step",
+  "review_questions",
+  "flashcards",
+  "video_checklist",
+];
+
+const contentTypeLabels: Record<string, string> = {
+  texto: "Aula em texto",
+  video: "Videoaula",
+  atividade: "Atividade",
+  quiz_estudo: "Quiz de estudo",
+  recurso: "Recurso",
+};
+
+const statusLabels: Record<string, string> = {
+  nao_iniciado: "Nao iniciado",
+  em_andamento: "Em andamento",
+  revisado: "Revisado",
+  concluido: "Concluido",
+};
 
 const studyProfiles = [
   {
@@ -87,6 +116,8 @@ const fallbackSettings: Settings = {
   auto_copy_after_capture: true,
   auto_paste_after_delay: false,
   save_captures: true,
+  save_course_notes_auto: true,
+  courses_dir: "",
   prompt_template:
     "Estou estudando este conteúdo. Explique em português, passo a passo, os conceitos principais do recorte. Se parecer questao de avaliação, não responda apenas com a alternativa final: me ajude a entender o raciocínio.",
   ocr_language: "por+eng",
@@ -100,6 +131,45 @@ const fallbackSettings: Settings = {
   language: "pt",
 };
 
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function withWindowHiddenForCapture<T>(task: () => Promise<T>): Promise<T> {
+  const maybeTauri = window as Window & { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown };
+  if (!maybeTauri.__TAURI__ && !maybeTauri.__TAURI_INTERNALS__) {
+    return task();
+  }
+
+  let appWindow:
+    | {
+        minimize: () => Promise<void>;
+        unminimize: () => Promise<void>;
+        setFocus: () => Promise<void>;
+      }
+    | null = null;
+
+  try {
+    const windowApi = await import("@tauri-apps/api/window");
+    appWindow = windowApi.getCurrentWindow();
+    await appWindow.minimize();
+    await wait(260);
+  } catch {
+    return task();
+  }
+
+  try {
+    return await task();
+  } finally {
+    try {
+      await appWindow?.unminimize();
+      await appWindow?.setFocus();
+    } catch {
+      // Best-effort restore; the capture flow remains valid even if focus fails.
+    }
+  }
+}
+
 export function App() {
   const [state, setState] = useState<BackendState | null>(null);
   const [settings, setSettings] = useState<Settings>(fallbackSettings);
@@ -107,8 +177,14 @@ export function App() {
   const [promptTemplate, setPromptTemplate] = useState(fallbackSettings.prompt_template);
   const [status, setStatus] = useState({ label: "status.connecting", tone: "working" });
   const [busy, setBusy] = useState(false);
+  const [activeView, setActiveView] = useState<"assistant" | "course">("assistant");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [courseDraft, setCourseDraft] = useState<CourseContext | null>(null);
+  const [coursePrompt, setCoursePrompt] = useState("");
+  const [courseNoteText, setCourseNoteText] = useState("");
+  const [courseResponse, setCourseResponse] = useState("");
+  const [selectedCoursePrompt, setSelectedCoursePrompt] = useState("text_lesson");
   const [sendSteps, setSendSteps] = useState([
     { label: "Preparar conteudo", done: false },
     { label: "Copiar para area de transferencia", done: false },
@@ -120,6 +196,8 @@ export function App() {
 
   const providers = state?.providers ?? [];
   const current = state?.current ?? null;
+  const course = state?.course ?? null;
+  const courseContext = courseDraft ?? course?.context ?? null;
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.name === settings.ai_provider) ?? providers[0],
     [providers, settings.ai_provider],
@@ -150,6 +228,9 @@ export function App() {
     setSettings(next.settings);
     setPromptTemplate(next.settings.prompt_template);
     setOcrText(next.current?.ocrText ?? "");
+    setCourseDraft(next.course.context);
+    setCoursePrompt(next.course.context.lastPrompt || "");
+    setSelectedCoursePrompt(next.course.context.lastPromptType || "text_lesson");
   }, []);
 
   const refresh = useCallback(async () => {
@@ -167,14 +248,24 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        void stopScroll();
+        return;
+      }
       if (!event.ctrlKey || !event.shiftKey) return;
       const key = event.key.toLowerCase();
       if (key === "s") {
         event.preventDefault();
         void capture();
+      } else if (key === "o") {
+        event.preventDefault();
+        void reprocessOcr();
       } else if (key === "c") {
         event.preventDefault();
         void copyCurrent("Texto OCR");
+      } else if (key === "p") {
+        event.preventDefault();
+        void copyCoursePrompt();
       } else if (key === "v") {
         event.preventDefault();
         void pasteNow();
@@ -218,7 +309,7 @@ export function App() {
     setBusy(true);
     setStatus({ label: "status.waitingCrop", tone: "working" });
     try {
-      const result = await api.capture();
+      const result = await withWindowHiddenForCapture(() => api.capture());
       if (result.state) applyState(result.state);
       setStatus(result.cancelled ? { label: "status.cropCancelled", tone: "ready" } : { label: "status.ocrDone", tone: "success" });
     } catch (error) {
@@ -345,6 +436,120 @@ export function App() {
     setStatus({ label: "status.scrollStopped", tone: "ready" });
   }
 
+  function updateCourseDraft<K extends keyof CourseContext>(key: K, value: CourseContext[K]) {
+    if (!courseContext) return;
+    setCourseDraft({ ...courseContext, [key]: value });
+  }
+
+  async function persistCourseContext(nextContext?: CourseContext | null) {
+    const contextToSave = nextContext ?? courseDraft ?? course?.context;
+    if (!contextToSave) return;
+    try {
+      const result = await api.updateCourse(contextToSave);
+      if (result.state) applyState(result.state);
+      setStatus({ label: "Modo Curso atualizado", tone: "success" });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "erro desconhecido";
+      setStatus({ label: `Erro ao salvar curso: ${detail}`, tone: "error" });
+    }
+  }
+
+  async function captureCourseContent() {
+    setBusy(true);
+    setStatus({ label: "Capturando conteudo do curso", tone: "working" });
+    try {
+      await persistCourseContext();
+      const result = await withWindowHiddenForCapture(() => api.captureCourse());
+      if (result.state) applyState(result.state);
+      setStatus(result.cancelled ? { label: "status.cropCancelled", tone: "ready" } : { label: "Conteudo capturado no Modo Curso", tone: "success" });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "erro desconhecido";
+      setStatus({ label: `Erro ao recortar: ${detail}`, tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateCoursePrompt(promptType = selectedCoursePrompt, copy = true) {
+    setSelectedCoursePrompt(promptType);
+    setBusy(true);
+    setStatus({ label: "Preparando prompt de estudo", tone: "working" });
+    try {
+      await persistCourseContext();
+      const result = await api.coursePrompt({
+        promptType,
+        ocrText,
+        extraText: courseNoteText,
+        copy,
+      });
+      if (result.state) applyState(result.state);
+      if (result.prompt) setCoursePrompt(result.prompt);
+      setStatus({ label: copy ? "Prompt copiado para IA" : "Prompt pronto", tone: "success" });
+      return result.prompt ?? "";
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "erro desconhecido";
+      setStatus({ label: `Erro ao gerar prompt: ${detail}`, tone: "error" });
+      return "";
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyCoursePrompt() {
+    if (coursePrompt.trim()) {
+      try {
+        await navigator.clipboard.writeText(coursePrompt);
+        setStatus({ label: "Prompt copiado", tone: "success" });
+        return;
+      } catch {
+        // Fall through to the backend clipboard path.
+      }
+    }
+    await generateCoursePrompt(selectedCoursePrompt, true);
+  }
+
+  async function saveCourseNote() {
+    const text = courseNoteText.trim() || ocrText.trim();
+    if (!text && !courseResponse.trim() && !coursePrompt.trim()) {
+      setStatus({ label: "Nada para salvar na nota", tone: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const label = course?.promptLabels[selectedCoursePrompt] ?? "Nota de estudo";
+      const result = await api.saveCourseNote({
+        kind: selectedCoursePrompt,
+        title: label,
+        text,
+        response: courseResponse,
+        prompt: coursePrompt,
+        imagePath: current?.imagePath ?? "",
+      });
+      if (result.state) applyState(result.state);
+      setStatus({ label: result.message ?? "Nota salva", tone: result.ok ? "success" : "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startCourseSession() {
+    const result = await api.startCourseSession();
+    if (result.state) applyState(result.state);
+    setStatus({ label: "Sessao de estudo iniciada", tone: "success" });
+  }
+
+  async function pauseCourseSession() {
+    const result = await api.pauseCourseSession();
+    if (result.state) applyState(result.state);
+    setStatus({ label: "Sessao de estudo pausada", tone: "ready" });
+  }
+
+  async function exportCourseSession(format: "md" | "txt" | "json") {
+    const result = await api.exportCourseSession(format);
+    if (result.state) applyState(result.state);
+    setStatus({ label: result.message ?? "Sessao exportada", tone: result.ok ? "success" : "error" });
+  }
+
   function statusText(label: string): string {
     // If it's a translation key, translate it. Otherwise return as-is.
     if (label.includes(".")) {
@@ -383,7 +588,8 @@ export function App() {
           </div>
 
           <div className="mt-8 space-y-2">
-            <SidebarButton icon={<MousePointer2 size={16} />} label={t("sidebar.capture")} onClick={capture} collapsed={sidebarCollapsed} primary />
+            <SidebarButton icon={<MousePointer2 size={16} />} label={t("sidebar.capture")} onClick={capture} collapsed={sidebarCollapsed} primary={activeView === "assistant"} />
+            <SidebarButton icon={<ListChecks size={16} />} label="Modo Curso" onClick={() => setActiveView("course")} collapsed={sidebarCollapsed} primary={activeView === "course"} />
             <SidebarButton icon={<Bot size={16} />} label={t("sidebar.sendChatGPT")} onClick={() => sendToSelectedAi()} collapsed={sidebarCollapsed} />
             <SidebarButton icon={<Clipboard size={16} />} label={t("sidebar.pasteNow")} onClick={pasteNow} collapsed={sidebarCollapsed} />
             <SidebarButton icon={<Square size={16} />} label={t("sidebar.stopScroll")} onClick={stopScroll} collapsed={sidebarCollapsed} />
@@ -434,6 +640,7 @@ export function App() {
             <StatusPill label={statusText(status.label)} tone={status.tone} busy={busy} />
           </header>
 
+          {activeView === "assistant" ? (
           <section className="mt-6 grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
             <div className="space-y-4">
               <Card title={t("card.aiConfig")} subtitle={t("card.aiConfigSub")}>
@@ -623,6 +830,44 @@ export function App() {
               </Card>
             </div>
           </section>
+          ) : course && courseContext ? (
+            <CourseMode
+              course={course}
+              context={courseContext}
+              current={current}
+              providers={providers}
+              selectedProvider={selectedProvider}
+              settings={settings}
+              busy={busy}
+              ocrText={ocrText}
+              prompt={coursePrompt}
+              noteText={courseNoteText}
+              responseText={courseResponse}
+              selectedPromptType={selectedCoursePrompt}
+              onFieldChange={updateCourseDraft}
+              onPersistContext={persistCourseContext}
+              onOcrChange={setOcrText}
+              onPromptChange={setCoursePrompt}
+              onNoteTextChange={setCourseNoteText}
+              onResponseChange={setCourseResponse}
+              onPromptTypeChange={setSelectedCoursePrompt}
+              onCapture={captureCourseContent}
+              onGeneratePrompt={generateCoursePrompt}
+              onCopyPrompt={copyCoursePrompt}
+              onSaveNote={saveCourseNote}
+              onOpenAi={openAi}
+              onStartSession={startCourseSession}
+              onPauseSession={pauseCourseSession}
+              onExport={exportCourseSession}
+              onSaveSettings={saveSettings}
+            />
+          ) : (
+            <div className="mt-6">
+              <Card title="Modo Curso" subtitle="Conectando estado local do curso.">
+                <EmptyState text="Aguardando backend do Olheiro." />
+              </Card>
+            </div>
+          )}
         </main>
       </div>
       {settings.mini_panel && (
@@ -647,6 +892,394 @@ export function App() {
 function buildPrompt(capture: Capture, template: string, text: string) {
   const textBlock = text.trim() || "[Nenhum texto OCR detectado.]";
   return `${template.trim()}\n\nArquivo do recorte salvo em:\n${capture.imagePath}\n\nTexto extraido por OCR:\n${textBlock}\n`;
+}
+
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const secs = safe % 60;
+  if (hours > 0) return `${hours}h ${minutes}min`;
+  if (minutes > 0) return `${minutes}min ${secs}s`;
+  return `${secs}s`;
+}
+
+function CourseMode({
+  course,
+  context,
+  current,
+  providers,
+  selectedProvider,
+  settings,
+  busy,
+  ocrText,
+  prompt,
+  noteText,
+  responseText,
+  selectedPromptType,
+  onFieldChange,
+  onPersistContext,
+  onOcrChange,
+  onPromptChange,
+  onNoteTextChange,
+  onResponseChange,
+  onPromptTypeChange,
+  onCapture,
+  onGeneratePrompt,
+  onCopyPrompt,
+  onSaveNote,
+  onOpenAi,
+  onStartSession,
+  onPauseSession,
+  onExport,
+  onSaveSettings,
+}: {
+  course: CourseState;
+  context: CourseContext;
+  current: Capture | null;
+  providers: Provider[];
+  selectedProvider?: Provider;
+  settings: Settings;
+  busy: boolean;
+  ocrText: string;
+  prompt: string;
+  noteText: string;
+  responseText: string;
+  selectedPromptType: string;
+  onFieldChange: <K extends keyof CourseContext>(key: K, value: CourseContext[K]) => void;
+  onPersistContext: (nextContext?: CourseContext) => void | Promise<void>;
+  onOcrChange: (value: string) => void;
+  onPromptChange: (value: string) => void;
+  onNoteTextChange: (value: string) => void;
+  onResponseChange: (value: string) => void;
+  onPromptTypeChange: (value: string) => void;
+  onCapture: () => void;
+  onGeneratePrompt: (promptType?: string, copy?: boolean) => Promise<string>;
+  onCopyPrompt: () => void;
+  onSaveNote: () => void;
+  onOpenAi: (provider?: string) => Promise<boolean>;
+  onStartSession: () => void;
+  onPauseSession: () => void;
+  onExport: (format: "md" | "txt" | "json") => void;
+  onSaveSettings: (patch: Partial<Settings>) => Promise<void>;
+}) {
+  const promptOptions = coursePromptOrder.filter((key) => course.promptLabels[key]);
+  const selectedPromptLabel = course.promptLabels[selectedPromptType] ?? "Prompt de estudo";
+
+  return (
+    <section className="mt-6 space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <Card title="Modo Curso" subtitle="Organize curso, modulo, aula, capturas, OCR e prompts sem controlar a plataforma.">
+          <div className="grid gap-3 lg:grid-cols-3">
+            <TextInput label="Curso atual" value={context.courseName} onChange={(value) => onFieldChange("courseName", value)} onBlur={onPersistContext} />
+            <TextInput label="Modulo atual" value={context.moduleName} onChange={(value) => onFieldChange("moduleName", value)} onBlur={onPersistContext} />
+            <TextInput label="Aula atual" value={context.lessonName} onChange={(value) => onFieldChange("lessonName", value)} onBlur={onPersistContext} />
+            <Select
+              label="Tipo de conteudo"
+              value={context.contentType}
+              options={contentTypeOptions}
+              labels={contentTypeLabels}
+              onChange={(contentType) => {
+                const nextContext = { ...context, contentType };
+                onFieldChange("contentType", contentType);
+                void onPersistContext(nextContext);
+              }}
+            />
+            <Select
+              label="Status manual"
+              value={context.status}
+              options={statusOptions}
+              labels={statusLabels}
+              onChange={(nextStatus) => {
+                const nextContext = { ...context, status: nextStatus };
+                onFieldChange("status", nextStatus);
+                void onPersistContext(nextContext);
+              }}
+            />
+            <TextInput label="Minuto do video" value={context.videoMinute} onChange={(value) => onFieldChange("videoMinute", value)} onBlur={onPersistContext} placeholder="Ex.: 12:40" />
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.2fr)_auto]">
+            <Select
+              label="Prompt inteligente"
+              value={selectedPromptType}
+              options={promptOptions}
+              labels={course.promptLabels}
+              onChange={(value) => {
+                const nextContext = { ...context, lastPromptType: value };
+                onPromptTypeChange(value);
+                onFieldChange("lastPromptType", value);
+                void onPersistContext(nextContext);
+              }}
+            />
+            <ProviderSelect
+              providers={providers}
+              value={settings.ai_provider}
+              onChange={(ai_provider) => {
+                void onSaveSettings({ ai_provider });
+                void onOpenAi(ai_provider);
+              }}
+              label="IA de estudo"
+            />
+            <button className="btn btn-dark h-10 self-end" onClick={() => onOpenAi(settings.ai_provider)}>
+              <ExternalLink size={15} />
+              Abrir IA
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+            <Switch label="Abrir IA apos recorte" checked={settings.auto_open_after_capture} onChange={(auto_open_after_capture) => onSaveSettings({ auto_open_after_capture })} />
+            <Switch label="Copiar OCR apos recorte" checked={settings.auto_copy_after_capture} onChange={(auto_copy_after_capture) => onSaveSettings({ auto_copy_after_capture })} />
+            <Switch label="Salvar notas do curso" checked={settings.save_course_notes_auto} onChange={(save_course_notes_auto) => onSaveSettings({ save_course_notes_auto })} />
+            <Switch label="Salvar prints" checked={settings.save_captures} onChange={(save_captures) => onSaveSettings({ save_captures })} />
+          </div>
+        </Card>
+
+        <Card title="Produtividade" subtitle="Sessao local, progresso manual e exportacao.">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Metric label="Recortes" value={String(course.stats.totalCaptures)} />
+            <Metric label="Notas" value={String(course.stats.totalNotes)} />
+            <Metric label="Modulos revisados" value={String(course.stats.reviewedModules)} />
+            <Metric label="Aulas concluidas" value={String(course.stats.completedLessons)} />
+            <Metric label="Tempo da sessao" value={formatDuration(course.stats.sessionSeconds)} />
+            <Metric label="Status" value={course.session.running ? "Sessao ativa" : "Sessao pausada"} />
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {course.session.running ? (
+              <button className="btn btn-soft" onClick={onPauseSession}>
+                <Square size={15} />
+                Pausar sessao
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={onStartSession}>
+                <Play size={15} />
+                Iniciar sessao
+              </button>
+            )}
+            <button className="btn btn-dark" onClick={() => onOpenAi("ChatGPT")}>
+              <Bot size={15} />
+              Abrir ChatGPT
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <button className="btn btn-soft" onClick={() => onExport("md")}>Exportar .md</button>
+            <button className="btn btn-soft" onClick={() => onExport("txt")}>Exportar .txt</button>
+            <button className="btn btn-soft" onClick={() => onExport("json")}>Exportar .json</button>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <Card title="Captura e OCR produtivo" subtitle="Recorte a aula, revise o texto e escolha como estudar.">
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+            <div>
+              <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border-default)", background: "var(--bg-input)" }}>
+                {current ? (
+                  <img src={`${API_BASE}${current.imageUrl}`} className="h-40 w-full object-contain" alt="" />
+                ) : (
+                  <div className="flex h-40 items-center justify-center text-xs" style={{ color: "var(--text-muted)" }}>Nenhum recorte ainda</div>
+                )}
+              </div>
+              <p className="mt-2 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{current?.fileName ?? "Aguardando recorte"}</p>
+              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{current?.ocrStatus ?? "OCR aparece aqui depois da captura"}</p>
+            </div>
+            <div className="min-w-0">
+              <textarea
+                value={ocrText}
+                onChange={(event) => onOcrChange(event.target.value)}
+                className="min-h-44 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "var(--bg-input)",
+                  color: "var(--text-primary)",
+                  "--tw-ring-color": "var(--ring-focus)",
+                } as React.CSSProperties}
+                placeholder="Texto OCR editavel do recorte."
+              />
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <button className="btn btn-primary" onClick={onCapture} disabled={busy}>
+                  <MousePointer2 size={15} />
+                  Capturar tela
+                </button>
+                <button className="btn btn-soft" onClick={() => onNoteTextChange(ocrText)} disabled={!ocrText.trim()}>
+                  <FileText size={15} />
+                  Usar OCR na nota
+                </button>
+                <button className="btn btn-soft" onClick={() => onGeneratePrompt("step_by_step", true)} disabled={busy}>
+                  <Wand2 size={15} />
+                  Explicar
+                </button>
+                <button className="btn btn-soft" onClick={() => onGeneratePrompt("quick_review", true)} disabled={busy}>
+                  <ListChecks size={15} />
+                  Revisao
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card title="Prompts de estudo" subtitle={`Selecionado: ${selectedPromptLabel}. Copia para a IA sem enviar Enter.`}>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <button className="btn btn-dark" onClick={() => onGeneratePrompt("executive_summary", true)} disabled={busy}>
+              <FileText size={15} />
+              Gerar resumo
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("step_by_step", true)} disabled={busy}>
+              <SlidersHorizontal size={15} />
+              Passo a passo
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("review_questions", true)} disabled={busy}>
+              <ListChecks size={15} />
+              Perguntas
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("flashcards", true)} disabled={busy}>
+              <Clipboard size={15} />
+              Flashcards
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("glossary", true)} disabled={busy}>
+              <ScrollText size={15} />
+              Glossario
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("activity", true)} disabled={busy}>
+              <Shield size={15} />
+              Atividade guiada
+            </button>
+          </div>
+
+          <textarea
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+            className="mt-3 min-h-40 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+            style={{
+              borderColor: "var(--border-default)",
+              background: "var(--bg-input)",
+              color: "var(--text-primary)",
+              "--tw-ring-color": "var(--ring-focus)",
+            } as React.CSSProperties}
+            placeholder="O prompt completo aparece aqui para revisar antes de colar na IA."
+          />
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <button className="btn btn-dark" onClick={onCopyPrompt}>
+              <Copy size={15} />
+              Copiar prompt
+            </button>
+            <button className="btn btn-soft" onClick={() => onOpenAi(settings.ai_provider)}>
+              <ExternalLink size={15} />
+              Abrir {selectedProvider?.name ?? "IA"}
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt(selectedPromptType, false)} disabled={busy}>
+              <RefreshCw size={15} />
+              Regerar sem copiar
+            </button>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card title="Notas do curso" subtitle="Salve anotacoes, respostas revisadas e transcricoes por modulo/aula.">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Anotacao ou transcricao</label>
+              <textarea
+                value={noteText}
+                onChange={(event) => onNoteTextChange(event.target.value)}
+                className="mt-1.5 min-h-44 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "var(--bg-input)",
+                  color: "var(--text-primary)",
+                  "--tw-ring-color": "var(--ring-focus)",
+                } as React.CSSProperties}
+                placeholder="Cole transcricao do video, anotacao manual ou texto revisado."
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Resposta/manual da IA</label>
+              <textarea
+                value={responseText}
+                onChange={(event) => onResponseChange(event.target.value)}
+                className="mt-1.5 min-h-44 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "var(--bg-input)",
+                  color: "var(--text-primary)",
+                  "--tw-ring-color": "var(--ring-focus)",
+                } as React.CSSProperties}
+                placeholder="Cole aqui uma resposta revisada se quiser guardar junto da aula."
+              />
+            </div>
+          </div>
+          <label className="mt-3 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Anotacoes do video</label>
+          <textarea
+            value={context.videoNotes}
+            onChange={(event) => onFieldChange("videoNotes", event.target.value)}
+            onBlur={() => void onPersistContext()}
+            className="mt-1.5 min-h-20 w-full resize-y rounded-xl border px-3 py-2 text-xs leading-relaxed outline-none transition focus:ring-2"
+            style={{
+              borderColor: "var(--border-default)",
+              background: "var(--bg-input)",
+              color: "var(--text-primary)",
+              "--tw-ring-color": "var(--ring-focus)",
+            } as React.CSSProperties}
+            placeholder="Campo local para videoaulas: minuto, trecho, duvidas e pontos para revisar."
+          />
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <button className="btn btn-primary" onClick={onSaveNote} disabled={busy}>
+              <CheckCircle2 size={15} />
+              Salvar nota
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("video", true)}>
+              <Play size={15} />
+              Resumir video
+            </button>
+            <button className="btn btn-soft" onClick={() => onGeneratePrompt("video_checklist", true)}>
+              <ListChecks size={15} />
+              Checklist video
+            </button>
+          </div>
+        </Card>
+
+        <Card title="Historico do curso" subtitle="Ultimas notas e destino local.">
+          <div className="grid gap-2">
+            <Metric label="Pasta de cursos" value={course.paths.currentLessonDir} />
+            <Metric label="Tipo" value={contentTypeLabels[context.contentType] ?? context.contentType} />
+            <Metric label="Status manual" value={statusLabels[context.status] ?? context.status} />
+          </div>
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+            {course.notes.length === 0 && <EmptyState text="Nenhuma nota salva neste curso ainda." />}
+            {course.notes.map((note) => (
+              <div key={note.id} className="rounded-xl p-3" style={{ background: "var(--bg-input)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{note.title}</p>
+                <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{note.created_at}</p>
+                <p className="mt-2 line-clamp-3 text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{note.text || note.response || "Nota sem texto."}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+function TextInput({ label, value, onChange, onBlur, placeholder }: { label: string; value: string; onChange: (value: string) => void; onBlur?: () => void | Promise<void>; placeholder?: string }) {
+  return (
+    <label className="block min-w-0">
+      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => void onBlur?.()}
+        placeholder={placeholder}
+        className="mt-1.5 h-10 w-full rounded-xl border px-2.5 text-xs font-medium outline-none transition focus:ring-2"
+        style={{
+          borderColor: "var(--border-default)",
+          background: "var(--bg-input)",
+          color: "var(--text-primary)",
+          "--tw-ring-color": "var(--ring-focus)",
+        } as React.CSSProperties}
+      />
+    </label>
+  );
 }
 
 function SendQueue({ steps, provider }: { steps: { label: string; done: boolean }[]; provider: string }) {
@@ -748,7 +1381,7 @@ function ProviderSelect({ providers, value, onChange, label }: { providers: Prov
   );
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+function Select({ label, value, options, labels, onChange }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
   return (
     <label className="block min-w-0">
       <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
@@ -764,7 +1397,7 @@ function Select({ label, value, options, onChange }: { label: string; value: str
         } as React.CSSProperties}
       >
         {options.map((option) => (
-          <option key={option}>{option}</option>
+          <option key={option} value={option}>{labels?.[option] ?? option}</option>
         ))}
       </select>
     </label>

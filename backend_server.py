@@ -13,13 +13,15 @@ from typing import Any, Optional
 
 import tkinter as tk
 
-from config.paths import ASSETS_DIR, CAPTURES_DIR, HISTORY_PATH, ROOT_DIR
+from config.paths import ASSETS_DIR, CAPTURES_DIR, COURSES_DIR, HISTORY_PATH, ROOT_DIR
 from config.providers import AI_PROVIDERS, DEFAULT_PROVIDER, PROVIDERS_BY_NAME
 from config.settings import AppSettings, load_settings, save_settings
 from models.capture import CaptureResult
 from services.browser_service import BrowserService
 from services.capture_service import ScreenCaptureService
 from services.clipboard_service import ClipboardService
+from services.course_service import CourseService
+from services.export_service import ExportService
 from services.ocr_service import OCRService
 from services.scroll_service import ScrollService
 from utils.platform_utils import beep, paste_hotkey, set_dpi_awareness
@@ -36,6 +38,8 @@ class BackendState:
         self.capture_service = ScreenCaptureService()
         self.ocr_service = OCRService()
         self.browser_service = BrowserService()
+        self.course_service = CourseService(self._log, Path(self.settings.courses_dir or COURSES_DIR))
+        self.export_service = ExportService()
         self.clipboard_root = tk.Tk()
         self.clipboard_root.withdraw()
         self.clipboard_service = ClipboardService(self.clipboard_root)
@@ -94,6 +98,7 @@ class BackendState:
             ],
             "current": self._serialize_capture(self.current),
             "history": [self._serialize_capture(item) for item in self.history],
+            "course": self.course_service.serialize(),
             "system": {
                 "ocr": self.ocr_service.status,
                 "captures": str(CAPTURES_DIR),
@@ -121,7 +126,7 @@ class BackendState:
         self._purge_old_captures()
         return self.serialize()
 
-    def capture(self) -> dict[str, Any]:
+    def capture(self, course_mode: bool = False) -> dict[str, Any]:
         self._log("Aguardando recorte.")
         result = self.capture_service.capture_region(self.clipboard_root, self.settings.save_captures)
 
@@ -138,11 +143,14 @@ class BackendState:
         result.ocr_text = ocr.text
         result.ocr_status = ocr.status
         result.prompt = build_prompt(self.settings.prompt_template, result, result.ocr_text)
+        self._write_capture_sidecars(result)
         self.current = result
         self.history.insert(0, result)
         self.history = self.history[: self.settings.history_limit]
         self._save_history()
         self._log(result.ocr_status)
+        if course_mode or self.settings.save_course_notes_auto:
+            self.course_service.attach_capture(result, result.prompt)
 
         if self.settings.auto_copy_after_capture:
             self.copy_content(self.settings.paste_mode, result.ocr_text, result.prompt)
@@ -152,6 +160,9 @@ class BackendState:
             self.schedule_paste(self.settings.paste_mode, result.ocr_text, result.prompt)
         beep()
         return {"cancelled": False, "state": self.serialize()}
+
+    def capture_course_content(self) -> dict[str, Any]:
+        return self.capture(course_mode=True)
 
     def reprocess_ocr(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = self.current
@@ -279,6 +290,37 @@ class BackendState:
         ]
         return {"ok": True, "diagnostic": "\n".join(payload), "state": self.serialize()}
 
+    def update_course(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.course_service.update_context(payload)
+        return {"ok": True, "message": "Modo Curso atualizado.", "state": self.serialize()}
+
+    def generate_course_prompt(self, payload: dict[str, Any]) -> dict[str, Any]:
+        prompt_type = str(payload.get("promptType", "text_lesson") or "text_lesson")
+        ocr_text = str(payload.get("ocrText", self.current.ocr_text if self.current else "") or "")
+        extra_text = str(payload.get("extraText", "") or "")
+        prompt = self.course_service.build_prompt(prompt_type, ocr_text, extra_text)
+        if payload.get("copy", True):
+            self.clipboard_service.copy_text(prompt)
+            self._log("Prompt do Modo Curso copiado.")
+        return {"ok": True, "message": "Prompt do Modo Curso pronto.", "prompt": prompt, "state": self.serialize()}
+
+    def save_course_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.course_service.save_note(payload)
+        return {**result, "state": self.serialize()}
+
+    def start_course_session(self) -> dict[str, Any]:
+        self.course_service.start_session()
+        return {"ok": True, "message": "Sessao iniciada.", "state": self.serialize()}
+
+    def pause_course_session(self) -> dict[str, Any]:
+        self.course_service.pause_session()
+        return {"ok": True, "message": "Sessao pausada.", "state": self.serialize()}
+
+    def export_course_session(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.export_service.export_session(self.course_service.serialize(), str(payload.get("format", "md")))
+        self._log(result["message"])
+        return {**result, "state": self.serialize()}
+
     def _purge_old_captures(self) -> None:
         days = int(self.settings.privacy_auto_delete_days or 0)
         if days <= 0 or not CAPTURES_DIR.exists():
@@ -305,6 +347,13 @@ class BackendState:
 
     def _message(self, ok: bool, message: str) -> dict[str, Any]:
         return {"ok": ok, "message": message, "state": self.serialize()}
+
+    def _write_capture_sidecars(self, result: CaptureResult) -> None:
+        try:
+            result.image_path.with_suffix(".txt").write_text(result.ocr_text or "", encoding="utf-8")
+            result.image_path.with_suffix(".json").write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError as exc:
+            self._log(f"Nao foi possivel salvar OCR lateral: {str(exc).splitlines()[0]}")
 
     def _serialize_capture(self, result: Optional[CaptureResult]) -> Optional[dict[str, Any]]:
         if result is None:
@@ -414,6 +463,13 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         routes = {
             "/api/settings": lambda: STATE.update_settings(payload),
             "/api/capture": STATE.capture,
+            "/api/course/update": lambda: STATE.update_course(payload),
+            "/api/course/capture": STATE.capture_course_content,
+            "/api/course/prompt": lambda: STATE.generate_course_prompt(payload),
+            "/api/course/save-note": lambda: STATE.save_course_note(payload),
+            "/api/course/session/start": STATE.start_course_session,
+            "/api/course/session/pause": STATE.pause_course_session,
+            "/api/course/export": lambda: STATE.export_course_session(payload),
             "/api/ocr/reprocess": lambda: STATE.reprocess_ocr(payload),
             "/api/copy": lambda: STATE.copy_content(payload.get("mode", STATE.settings.paste_mode), payload.get("ocrText"), payload.get("prompt")),
             "/api/paste": lambda: STATE.paste_content(payload.get("mode", STATE.settings.paste_mode), payload.get("ocrText"), payload.get("prompt")),
@@ -461,7 +517,14 @@ class OlheiroHandler(BaseHTTPRequestHandler):
         except OSError:
             self._send_json({"ok": False, "message": "Arquivo inválido."}, status=404)
             return
-        allowed_roots = (ASSETS_DIR.resolve(), CAPTURES_DIR.resolve(), (Path(__file__).resolve().parent / "captures").resolve(), Path(os.getenv("TEMP", ".")).resolve())
+        allowed_roots = (
+            ASSETS_DIR.resolve(),
+            CAPTURES_DIR.resolve(),
+            COURSES_DIR.resolve(),
+            Path(STATE.settings.courses_dir or COURSES_DIR).resolve(),
+            (Path(__file__).resolve().parent / "captures").resolve(),
+            Path(os.getenv("TEMP", ".")).resolve(),
+        )
         if not any(str(resolved).startswith(str(root)) for root in allowed_roots):
             self._send_json({"ok": False, "message": "Arquivo bloqueado."}, status=403)
             return
@@ -498,7 +561,13 @@ class OlheiroHandler(BaseHTTPRequestHandler):
             resolved = path.resolve()
         except OSError:
             return False
-        roots = [CAPTURES_DIR.resolve(), (ROOT_DIR / "captures").resolve(), Path(os.getenv("TEMP", ".")).resolve()]
+        roots = [
+            CAPTURES_DIR.resolve(),
+            COURSES_DIR.resolve(),
+            Path(STATE.settings.courses_dir or COURSES_DIR).resolve(),
+            (ROOT_DIR / "captures").resolve(),
+            Path(os.getenv("TEMP", ".")).resolve(),
+        ]
         return resolved.suffix.lower() == ".png" and any(str(resolved).startswith(str(root)) for root in roots)
 
 def main() -> None:

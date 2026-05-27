@@ -27,8 +27,8 @@ Download the latest version from the releases page:
 
 Main release files:
 
-- `Olheiro_0.3.6_x64-setup.exe`: recommended installer for Windows.
-- `Olheiro_0.3.6_x64_en-US.msi`: alternative MSI installer.
+- `Olheiro_0.4.0_x64-setup.exe`: recommended installer for Windows.
+- `Olheiro_0.4.0_x64_en-US.msi`: alternative MSI installer.
 
 > The installer includes the Tauri app, React frontend, bundled Python backend and a portable Tesseract OCR runtime with `eng`, `por`, `spa` and `osd` language data.
 
@@ -60,6 +60,10 @@ It does not automate course platforms, does not log in to accounts, does not sav
 - **Light / Dark / System theme.**
 - **English and Portuguese interface.**
 - **Direct IA opening; no local dispatcher tab between Olheiro and the selected IA.**
+- **Modo Curso** with course/module/lesson context, manual progress, study prompts, notes and session export.
+- **Course folders** saved as `courses/NOME_DO_CURSO/modulo_XX/aula_XX/` with image, OCR text and metadata.
+- Capture now minimizes the Olheiro window before cropping so the app does not appear in the screenshot.
+- Captures also save `.txt` and `.json` sidecars with OCR and metadata.
 - **Mini floating panel with capture, send, paste and stop-scroll controls.**
 - **Privacy tools to clear history/captures and auto-delete old captures.**
 - **Copy diagnostic log for faster bug reports.**
@@ -86,6 +90,25 @@ It features:
 - Mini floating control panel;
 - Persistent action history;
 - Responsive layout for smaller and larger screens.
+
+## Modo Curso
+
+Modo Curso is a study workspace for online courses such as Cisco Networking Academy. It helps the student organize the current course, module, lesson, content type and manual status, then capture the lesson area, run OCR, review the extracted text, generate study prompts, save notes and export the study session.
+
+It includes ready prompts for:
+
+- Aula em texto.
+- Videoaula.
+- Atividade guiada.
+- Revisao rapida.
+- Resumo executivo.
+- Glossario.
+- Explicacao passo a passo.
+- Perguntas de revisao.
+- Flashcards.
+- Checklist de video.
+
+The mode supports local notes, optional video minute annotations, manual pasted AI responses, `.md`, `.txt` and `.json` session exports, and a productivity panel with captures, notes, reviewed modules, completed lessons and session time.
 
 ## Stack
 
@@ -150,8 +173,8 @@ The script below prepares dependencies, downloads or copies a portable Tesseract
 
 Outputs:
 
-- `src-tauri\target\release\bundle\nsis\Olheiro_0.3.6_x64-setup.exe`
-- `src-tauri\target\release\bundle\msi\Olheiro_0.3.6_x64_en-US.msi`
+- `src-tauri\target\release\bundle\nsis\Olheiro_0.4.0_x64-setup.exe`
+- `src-tauri\target\release\bundle\msi\Olheiro_0.4.0_x64_en-US.msi`
 - `src-tauri\target\release\olheiro.exe`
 
 ### Code signing (optional)
@@ -169,10 +192,13 @@ $env:OLHEIRO_SIGN_PASS = "certificate-password"
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+Shift+S` | Capture screen |
+| `Ctrl+Shift+O` | Reprocess current OCR |
 | `Ctrl+Shift+C` | Copy current OCR |
+| `Ctrl+Shift+P` | Copy current course prompt |
 | `Ctrl+Shift+V` | Paste selected content |
 | `Ctrl+Shift+Down` | Scroll down |
 | `Ctrl+Shift+Up` | Scroll up |
+| `Esc` | Stop scroll |
 
 ## Structure
 
@@ -182,6 +208,8 @@ backend_server.py        Local API used by frontend
 config/                  Paths, providers and settings
 models/                  Data models
 services/                OCR, capture, clipboard, browser and scroll
+services/course_service.py  Course mode notes, prompts and local organization
+services/export_service.py  Session export to .md, .txt and .json
 scripts/                 Build helpers, including portable Tesseract setup
 src/                     React/Tailwind frontend
   i18n.ts                Internationalization (PT/EN)
@@ -206,6 +234,8 @@ Local preferences are stored in `settings.json` during development and in `%LOCA
 
 Use Olheiro to study and understand content. Respect course rules, platforms, exams and evaluations. The app is designed to keep the user in control: it copies, pastes and opens pages, but does not send answers and does not try to bypass any site's rules.
 
+O Olheiro e um assistente local de estudo. Ele nao deve ser usado para burlar plataformas, automatizar avaliacoes, responder provas automaticamente ou violar regras de cursos online. O objetivo e apoiar leitura, organizacao, OCR, revisao e produtividade, mantendo o estudante no controle.
+
 ## Roadmap
 
 - ~~Persist history across sessions.~~ ✅
@@ -216,6 +246,7 @@ Use Olheiro to study and understand content. Respect course rules, platforms, ex
 - ~~Add study profiles, OCR reprocess controls, privacy cleanup and diagnostics.~~ ✅
 - ~~Prepare code signing infrastructure.~~ ✅
 - ~~Auto-update via GitHub releases.~~ ✅
+- ~~Add Modo Curso with prompts, notes, course folders and session export.~~
 - Add more AI providers.
 - Support macOS and Linux.
 - Global hotkey registration outside the app window.

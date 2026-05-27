@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from config.paths import SETTINGS_PATH
+from config.paths import COURSES_DIR, SETTINGS_PATH
 from config.providers import DEFAULT_PASTE_MODE, DEFAULT_PROVIDER, PASTE_MODES, PROVIDERS_BY_NAME
 
 
@@ -26,6 +26,8 @@ class AppSettings:
     auto_copy_after_capture: bool = True
     auto_paste_after_delay: bool = False
     save_captures: bool = True
+    save_course_notes_auto: bool = True
+    courses_dir: str = str(COURSES_DIR)
     prompt_template: str = DEFAULT_PROMPT_TEMPLATE
     ocr_language: str = "por+eng"
     ocr_preprocess: str = "balanced"
@@ -57,6 +59,7 @@ class AppSettings:
         self.privacy_auto_delete_days = clamp_int(self.privacy_auto_delete_days, 0, 365, 0)
         self.prompt_template = str(self.prompt_template or DEFAULT_PROMPT_TEMPLATE).strip()
         self.study_profile = str(self.study_profile or "Geral").strip() or "Geral"
+        self.courses_dir = str(self.courses_dir or COURSES_DIR)
         if self.ocr_language not in ("por+eng", "por", "eng", "spa", "eng+por"):
             self.ocr_language = "por+eng"
         if self.ocr_preprocess not in ("balanced", "high_contrast", "raw"):

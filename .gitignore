@@ -32,12 +32,16 @@ vendor/
 
 # User data and private local state
 settings.json
+history.json
+course_state.json
 tauri-dev.log
 *.log
 
 # Personal captures / screenshots
 captures/*
 !captures/.gitkeep
+courses/
+data/
 recorte_*.png
 recorte_*.jpg
 recorte_*.jpeg

@@ -36,6 +36,41 @@ export const api = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+  updateCourse: (payload: Record<string, unknown>) =>
+    request<ApiResult>("/api/course/update", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  captureCourse: () =>
+    request<ApiResult>("/api/course/capture", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  coursePrompt: (payload: Record<string, unknown>) =>
+    request<ApiResult & { prompt?: string }>("/api/course/prompt", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  saveCourseNote: (payload: Record<string, unknown>) =>
+    request<ApiResult>("/api/course/save-note", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  startCourseSession: () =>
+    request<ApiResult>("/api/course/session/start", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  pauseCourseSession: () =>
+    request<ApiResult>("/api/course/session/pause", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  exportCourseSession: (format: "md" | "txt" | "json") =>
+    request<ApiResult & { path?: string }>("/api/course/export", {
+      method: "POST",
+      body: JSON.stringify({ format }),
+    }),
   reprocessOcr: (payload: Record<string, unknown>) =>
     request<ApiResult>("/api/ocr/reprocess", {
       method: "POST",
